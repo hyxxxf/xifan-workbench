@@ -556,7 +556,7 @@ function openSyncPanel(){
     try{
       if(!SYNC.gistId){const id=await gistCreate();toast('已新建 Gist 并连接：'+id.slice(0,8));}
       else{await gistPull();toast('已连接并下载云端数据');}
-      SYNC.enabled=true;saveSync();refresh();openSyncPanel();
+      SYNC.enabled=true;saveSync();refresh();startSyncPolling(60000);openSyncPanel();
     }catch(e){toast('连接失败：'+e.message);setSyncDot('err');}
   };
   $('#syncPush').onclick=async()=>{
@@ -568,6 +568,25 @@ function openSyncPanel(){
     SYNC.token=$('#syncToken').value.trim();SYNC.gistId=$('#syncGist').value.trim();saveSync();
     try{await gistPull();toast('已从云端下载');refresh();}catch(e){toast('下载失败：'+e.message);setSyncDot('err');}
   };
+}
+/* 后台轮询：每隔 interval（默认 60s）检测云端 rev，发现新版本自动拉取，
+   这样手机改完数据，电脑/平板开着页面也能在 1 分钟内自动收到更新 */
+let _pollTimer=null,_pollNotified=0;
+function startSyncPolling(interval){
+  if(_pollTimer)clearInterval(_pollTimer);
+  if(!interval||interval<10000)interval=60000;
+  _pollTimer=setInterval(async()=>{
+    if(!SYNC.enabled||!SYNC.token||!SYNC.gistId)return;
+    try{
+      const cur=await gistApi('GET',SYNC.gistId);
+      const remote=cur.files&&cur.files[SYNC_FILE]?JSON.parse(cur.files[SYNC_FILE].content||'{}'):{rev:0};
+      if(remote.rev&&remote.rev>SYNC.lastRev){
+        setSyncDot('busy');
+        await gistPull();
+        if(remote.rev!==_pollNotified){toast('☁ 已从云端同步最新数据');_pollNotified=remote.rev;}
+      }
+    }catch(e){/* 静默，避免打扰 */}
+  },interval);
 }
 let DB = load();
 
@@ -2337,6 +2356,7 @@ if(SYNC.enabled&&SYNC.token&&SYNC.gistId){
     if(/401|403/.test(e.message)){toast('云同步令牌失效，请重新连接');setSyncDot('err');}
     else{toast('启动同步失败（可能离线）：'+e.message);setSyncDot('warn');}
   });
+  startSyncPolling(60000); // 之后每 60 秒后台检测一次云端，有新版本自动拉取
 }
 showView('home');
 </script>
