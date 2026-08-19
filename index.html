@@ -868,22 +868,33 @@ function renderHomeSched(){
   </div>`).join('');
 }
 
-/* 首页：提醒事项（取前 5 条未完成，按分类着色） */
+/* 待办紧急程度：依据截止时间自动判定，与分类无关
+   逾期 或 ≤2天 → 紧急(红)；3~7天 → 临近(蓝)；>7天 或 无期限 → 正常(绿) */
+function todoUrgency(t){
+  if(!t.deadline)return {cls:'normal',text:'正常'};
+  const p=String(t.deadline).split('-');if(p.length!==3)return {cls:'normal',text:'正常'};
+  const due=new Date(+p[0],+p[1]-1,+p[2]);if(isNaN(due))return {cls:'normal',text:'正常'};
+  const today=new Date();const t0=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  const days=Math.round((due-t0)/86400000);
+  if(days<0)return {cls:'urgent',text:'逾期'};
+  if(days<=2)return {cls:'urgent',text:'紧急'};
+  if(days<=7)return {cls:'steady',text:'临近'};
+  return {cls:'normal',text:'正常'};
+}
+/* 首页：提醒事项（取前 5 条未完成，按截止时间着色） */
 function renderHomeReminder(){
   const box=document.getElementById('homeReminder');if(!box)return;
   const all=DB.todos.filter(t=>!t.done&&!t.archived);
   const list=all.slice(0,5);
-  const tagClass={'班级事务':'normal','家校沟通':'urgent','材料上交':'steady','安全排查':'urgent'};
-  const tagText={'班级事务':'正常','家校沟通':'紧急','材料上交':'平稳','安全排查':'紧急'};
   if(!list.length){
     box.innerHTML='<div class="empty"><div class="big">✓</div>暂无待办，全部搞定啦</div>';return;
   }
   box.innerHTML=list.map(t=>{
-    const cls=tagClass[t.tag]||'normal';
+    const u=todoUrgency(t);
     return `<div class="remind-item" data-action="todo-toggle" data-id="${t.id}" title="点击标记完成">
-      <span class="remind-dot ${cls}"></span>
+      <span class="remind-dot ${u.cls}"></span>
       <span class="remind-title">${esc(t.title)}</span>
-      <span class="remind-tag ${cls}">${esc(tagText[t.tag]||'正常')}</span>
+      <span class="remind-tag ${u.cls}">${esc(u.text)}</span>
     </div>`;
   }).join('');
   if(all.length>5){
