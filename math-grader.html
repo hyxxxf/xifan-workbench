@@ -690,14 +690,15 @@ async function filesToImages(fileList){
  * =======================================================================*/
 async function detectLocalProxyPort(){
   // 扫描 3000~3009，返回最新启动的代理端口（避免旧版代理残留占住低端口被误用）
+  // 使用 https://localhost 以支持从 GitHub Pages（HTTPS）页面调用
   const found=[];
   for(let p=3000; p<=3009; p++){
     try{
-      const res=await fetch(`http://127.0.0.1:${p}/health`, {method:'GET', signal: AbortSignal.timeout(400)});
+      const res=await fetch(`https://localhost:${p}/health`, {method:'GET', signal: AbortSignal.timeout(400)});
       if(!res.ok) continue;
       const data=await res.json();
       if(data && data.ok && data.proxy==='math-grader-local-cors-proxy'){
-        found.push({port: data.port || p, startAt: data.startAt || 0});
+        found.push({port: data.port || p, startAt: data.startAt || 0, https: !!data.https});
       }
     }catch(e){ /* 端口未监听或超时，继续下一个 */ }
   }
@@ -745,7 +746,7 @@ async function callAPI(promptText, images){
     if(!proxyPort){
       throw new Error('本地代理未运行：请在「① API 设置」点「🚀 一键启动本地代理」下载脚本并双击运行，保持窗口开启后再试');
     }
-    url = `http://127.0.0.1:${proxyPort}/chat/completions`;
+    url = `https://localhost:${proxyPort}/chat/completions`;
     reqHeaders['x-upstream'] = baseURL.replace(/\/$/,'');
     log('→ 使用本地代理端口：'+proxyPort);
   } else if(state.api.proxy && state.api.proxy.trim()){
