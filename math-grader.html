@@ -13,100 +13,6 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-<!-- 内嵌本地 CORS 代理源码（零依赖 Node 脚本），供“一键启动代理”按钮生成自包含启动脚本 -->
-<script type="text/plain" id="proxySrc">
-/**
- * 本地 CORS 代理（零依赖，仅用 Node 内置模块）
- * 让纯前端网页绕过浏览器对大模型接口的跨域(CORS)限制。
- * 浏览器 ─HTTP─> 本机 :3000(此代理) ─服务端转发─> 真实大模型 API
- */
-const http  = require('http');
-const https = require('https');
-const { URL } = require('url');
-
-const START_PORT = parseInt(process.env.PORT, 10) || 3000;
-const MAX_PORT_ATTEMPTS = 10;
-const DEFAULT_UPSTREAM = (process.env.UPSTREAM || '').replace(/\/$/, '');
-let actualPort = START_PORT;
-const START_AT = Date.now();
-
-function isPortInUse(port) {
-  return new Promise((resolve) => {
-    const tester = http.createServer().once('error', (err) => {
-      resolve(err.code === 'EADDRINUSE');
-    }).once('listening', () => { tester.close(); resolve(false); }).listen(port, '127.0.0.1');
-  });
-}
-async function findPort() {
-  for (let i = 0; i < MAX_PORT_ATTEMPTS; i++) {
-    const p = START_PORT + i;
-    if (!(await isPortInUse(p))) return p;
-    console.log(`   端口 ${p} 被占用，继续尝试...`);
-  }
-  return null;
-}
-
-const server = http.createServer((req, res) => {
-  const ts = new Date().toLocaleTimeString();
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-upstream');
-  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
-  if (req.url === '/' || req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify({ ok: true, proxy: 'math-grader-local-cors-proxy', port: actualPort, startAt: START_AT }));
-  }
-  const upstream = (req.headers['x-upstream'] || DEFAULT_UPSTREAM).replace(/\/$/, '');
-  if (!upstream) {
-    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('缺少 x-upstream 请求头或 UPSTREAM 环境变量');
-  }
-  const chunks = [];
-  req.on('data', c => chunks.push(c));
-  req.on('end', () => {
-    const body = chunks.length ? Buffer.concat(chunks) : null;
-    let target;
-    try { target = new URL(upstream.replace(/\/$/, '') + req.url); }
-    catch (e) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('上游地址解析失败: ' + e.message); }
-    const options = { method: req.method, headers: { ...req.headers, host: target.host } };
-    delete options.headers['x-upstream'];
-    delete options.headers['access-control-request-headers'];
-    delete options.headers['access-control-request-method'];
-    delete options.headers['origin'];
-    delete options.headers['referer'];
-    delete options.headers['connection'];
-    const TIMEOUT_MS = 300000;
-    const proto = target.protocol === 'http:' ? http : https;
-    const p = proto.request(target, options);
-    p.setTimeout(TIMEOUT_MS);
-    p.on('response', (upRes) => {
-      upRes.setTimeout(TIMEOUT_MS);
-      upRes.on('timeout', () => { upRes.destroy(); if (!res.headersSent) { res.writeHead(504, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('上游响应读取超时'); } });
-      const hopByHop = new Set(['connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailers','transfer-encoding','upgrade','content-encoding','content-length']);
-      const outHeaders = { 'access-control-allow-origin': '*' };
-      for (const [k, v] of Object.entries(upRes.headers)) { if (!hopByHop.has(k.toLowerCase())) outHeaders[k] = v; }
-      outHeaders['content-encoding'] = 'identity';
-      res.writeHead(upRes.statusCode, outHeaders);
-      upRes.pipe(res);
-    });
-    p.on('error', (e) => { if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' }); } res.end('代理转发失败: ' + e.message); });
-    p.on('timeout', () => { p.destroy(); if (!res.headersSent) { res.writeHead(504, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('上游请求超时'); } });
-    if (body) p.write(body);
-    p.end();
-  });
-});
-
-(async () => {
-  const port = await findPort();
-  if (!port) { console.error(`端口 ${START_PORT}~${START_PORT+MAX_PORT_ATTEMPTS-1} 均被占用`); process.exit(1); }
-  actualPort = port;
-  server.listen(actualPort, '127.0.0.1', () => {
-    console.log('✅ 本地 CORS 代理已启动: http://127.0.0.1:' + actualPort);
-    console.log('   前端 Base URL 保持真实地址，并勾选“使用本地代理”。关闭本窗口即停止。');
-  });
-  server.on('error', (err) => { console.error('❌ 代理启动失败:', err.message); process.exit(1); });
-})();
-</script>
 
 <style>
   :root{
@@ -299,11 +205,11 @@ const server = http.createServer((req, res) => {
         <input type="checkbox" id="cfgLocalProxy" style="width:auto"> 使用本地代理（Base URL 仍填真实地址即可）
       </label>
       <div class="btn-row" style="margin-top:8px">
-        <button class="btn-primary btn-sm" id="btnStartProxy">🚀 一键启动本地代理</button>
-        <span class="hint" style="margin:0">点此自动生成自包含启动脚本（跨电脑/系统通用），双击运行后网页会自动连接；无需手动找 proxy.js。</span>
+        <button class="btn-primary btn-sm" id="btnStartProxy">🚀 启动本地代理</button>
+        <span class="hint" style="margin:0">点此下载「启动代理.vbs」，双击运行即后台静默启动（无黑窗口），首次运行会自动设为开机自启。</span>
       </div>
       <div class="hint" style="margin-top:6px">
-        💡 若把本网页部署到 GitHub Pages 等 <b>https 环境</b>，大模型接口自带跨域放行，可<b>完全免代理</b>直连（取消勾选“使用本地代理”即可）。本地 file:// 打开才需要代理。
+        💡 代理只在你电脑本地运行（仅本机可访问，安全）。启动后勾选「使用本地代理」并测试连接即可。关闭代理：任务管理器结束 node.exe 进程。
       </div>
       <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--txt)">
         <input type="checkbox" id="cfgResponseFormat" style="width:auto"> 使用 response_format:json_object（OpenAI 等支持；若报错请取消勾选）
@@ -691,11 +597,12 @@ async function filesToImages(fileList){
  * =======================================================================*/
 async function detectLocalProxyPort(){
   // 扫描 3000~3009，返回最新启动的代理端口（避免旧版代理残留占住低端口被误用）
-  // 使用 https://localhost 以支持从 GitHub Pages（HTTPS）页面调用
+  // 使用 http://127.0.0.1：浏览器把 127.0.0.1/localhost 视为安全上下文，
+  // HTTPS 页面调用它不触发混合内容拦截，也无需自签名证书（无“不安全”警告）。
   const found=[];
   for(let p=3000; p<=3009; p++){
     try{
-      const res=await fetch(`https://localhost:${p}/health`, {method:'GET', signal: AbortSignal.timeout(400)});
+      const res=await fetch(`http://127.0.0.1:${p}/health`, {method:'GET', signal: AbortSignal.timeout(400)});
       if(!res.ok) continue;
       const data=await res.json();
       if(data && data.ok && data.proxy==='math-grader-local-cors-proxy'){
@@ -745,9 +652,9 @@ async function callAPI(promptText, images){
     // 代理可能因端口占用自动切换到 3001/3002...，前端自动扫描发现实际端口。
     const proxyPort = await detectLocalProxyPort();
     if(!proxyPort){
-      throw new Error('本地代理未运行：请在「① API 设置」点「🚀 一键启动本地代理」下载脚本并双击运行，保持窗口开启后再试');
+      throw new Error('本地代理未运行：请在「① API 设置」点「🚀 启动本地代理」下载启动器并双击运行，再点「测试连接」');
     }
-    url = `https://localhost:${proxyPort}/chat/completions`;
+    url = `http://127.0.0.1:${proxyPort}/chat/completions`;
     reqHeaders['x-upstream'] = baseURL.replace(/\/$/,'');
     log('→ 使用本地代理端口：'+proxyPort);
   } else if(state.api.proxy && state.api.proxy.trim()){
@@ -1975,57 +1882,32 @@ function download(name, text){
   URL.revokeObjectURL(a.href);
 }
 
-// 一键生成自包含、跨系统/跨电脑的本地代理启动脚本并自动连接
+// 「启动本地代理」：下载托管在仓库的静默启动器（启动代理.vbs），双击即后台运行
 $('btnStartProxy').addEventListener('click', async ()=>{
   // 已运行则直接提示
   let port=await detectLocalProxyPort();
   if(port){ setStatus($('cfgStatus'),`✅ 本地代理已在运行（端口 ${port}）`,'ok'); return; }
-  const src=document.getElementById('proxySrc').textContent;
-  const isWin=/Win/i.test(navigator.userAgent);
-  let name, content;
-  if(isWin){
-    name='一键启动代理.bat';
-    // 将源码做 UTF-8 → base64，分块 echo 写入文件（规避 cmd 单行长度限制），再 certutil 解码
-    const b64=btoa(unescape(encodeURIComponent(src)));
-    const chunks=b64.match(/.{1,1500}/g)||[b64];
-    const writes=chunks.map((c,i)=>(i===0?`echo ${c}>_p.b64`:`echo ${c}>>_p.b64`)).join('\n');
-    content=
-`@echo off
-chcp 65001 >nul
-setlocal
-set "NODE="
-where node >nul 2>nul && set "NODE=node"
-if not defined NODE ( if exist "%ProgramFiles%\\nodejs\\node.exe" set "NODE=%ProgramFiles%\\nodejs\\node.exe" )
-if not defined NODE ( for /d %%d in ("%USERPROFILE%\\.workbuddy\\binaries\\node\\versions\\*") do ( if exist "%%d\\node.exe" set "NODE=%%d\\node.exe" ) )
-if not defined NODE ( echo 未找到 Node.js，请先安装 Node 或运行 WorkBuddy。 & pause & exit /b 1 )
-${writes}
-certutil -decode _p.b64 proxy.js >nul 2>nul
-if exist _p.b64 del _p.b64 >nul 2>nul
-echo 正在启动本地代理，请勿关闭本窗口...
-"%NODE%" proxy.js
-pause`;
-  } else {
-    name='一键启动代理.sh';
-    content=
-`#!/bin/bash
-NODE=node
-command -v node >/dev/null 2>&1 || NODE="$HOME/.workbuddy/binaries/node/versions/22.22.2/node"
-if [ ! -x "$NODE" ] && [ ! -f "$NODE" ]; then echo "未找到 Node.js，请先安装。"; exit 1; fi
-cat > proxy.js <<'PROXY_EOF'
-${src}
-PROXY_EOF
-"$NODE" proxy.js`;
+  // 直接下载仓库里的启动器文件（已预构建，避免现场生成 .bat 的编码/路径坑）
+  const url='https://hyxxxf.github.io/xifan-workbench/启动代理.vbs';
+  try{
+    const resp=await fetch(url);
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const txt=await resp.text();
+    const blob=new Blob([txt],{type:'application/octet-stream'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='启动代理.vbs'; a.click(); URL.revokeObjectURL(a.href);
+    setStatus($('cfgStatus'),'已下载「启动代理.vbs」，请双击运行（后台静默启动，无黑窗口）。网页正在自动等待连接…','ok');
+  }catch(e){
+    // 下载失败兜底：给出文件直链让用户手动保存
+    setStatus($('cfgStatus'),'自动下载失败，请浏览器访问 '+url+' 手动保存到本地后双击运行。','err');
+    return;
   }
-  const blob=new Blob([content],{type:'application/octet-stream'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
-  setStatus($('cfgStatus'),`已下载「${name}」，请双击运行。网页正在自动等待代理连接…`,'ok');
   // 自动等待连接（最多约 50 秒）
   for(let i=0;i<25;i++){
     await new Promise(r=>setTimeout(r,2000));
     port=await detectLocalProxyPort();
     if(port){ setStatus($('cfgStatus'),`✅ 本地代理已连接（端口 ${port}），可开始批改`,'ok'); return; }
   }
-  setStatus($('cfgStatus'),'未能自动连上代理：请确认脚本是否已双击运行（保持黑框开启）。','err');
+  setStatus($('cfgStatus'),'未能自动连上代理：请确认「启动代理.vbs」是否已双击运行（可在任务管理器查看是否有 node.exe 进程）。','err');
 });
 
 /* =========================================================================
