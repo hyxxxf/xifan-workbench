@@ -1259,13 +1259,29 @@ $('btnBatchGrade').addEventListener('click', async ()=>{
     log('批改开始：'+item.name);
     try{
       const result=await gradeOne(item);   // ← 客观题离线 + 主观题调 Prompt2（内部拆分）
-      state.students.push({meta:{name:item.name,cls:item.cls}, result});
-      log('✅ 完成：'+item.name+' 得分 '+(result.实际得分||'?'));
+      const ti=findMergeTarget(item.name);
+      if(ti>=0){
+        // 同一学生已存在 → 合并两次批改（如先批客观再批主观，或反之）
+        const merged=mergeStudentResult(state.students[ti].result, result);
+        state.students[ti]={meta: state.students[ti].meta, result: merged};
+        if(!state.students[ti].meta.name && item.name) state.students[ti].meta.name=item.name;
+        if(!state.students[ti].meta.cls && item.cls) state.students[ti].meta.cls=item.cls;
+        log('✅ 合并完成：'+item.name+' 得分 '+(merged.实际得分||'?'));
+      }else{
+        state.students.push({meta:{name:item.name,cls:item.cls}, result});
+        log('✅ 完成：'+item.name+' 得分 '+(result.实际得分||'?'));
+      }
     }catch(e){
       log('❌ '+item.name+' 失败：'+e.message);
-      state.students.push({meta:{name:item.name,cls:item.cls},
-        result:{学生姓名:item.name,班级:item.cls,实际得分:'—',错误:'批改失败：'+e.message,
-                每道题批改明细:[],错题列表:[],个人作业统计:{},个人学情建议:''}});
+      const failResult={学生姓名:item.name,班级:item.cls,实际得分:'—',错误:'批改失败：'+e.message,
+                每道题批改明细:[],错题列表:[],个人作业统计:{},个人学情建议:''};
+      const ti=findMergeTarget(item.name);
+      if(ti>=0){
+        const merged=mergeStudentResult(state.students[ti].result, failResult);
+        state.students[ti]={meta: state.students[ti].meta, result: merged};
+      }else{
+        state.students.push({meta:{name:item.name,cls:item.cls}, result:failResult});
+      }
     }
   }
   $('gradeProg').firstElementChild.style.width='100%';
@@ -1297,12 +1313,21 @@ async function gradeOne(item){
   // 完整试卷模式下，把客观题作业文件也一并传给模型作为参考
   let subDetails=[], subErrors=[], subAdvice='';
   if(subQ.length){
-    const allImages = await filesToImages((item.files||[]).concat(item.objFiles||[]));
-    const prompt = buildPrompt2Sub(rubric, item.name, item.cls, subQ); // ← 使用 Prompt2（仅主观题）
-    const sub = await callAPI(prompt, allImages);
-    subDetails = sub.每道题批改明细 || [];
-    subErrors  = sub.错题列表 || [];
-    subAdvice  = sub.个人学情建议 || '';
+    try{
+      const allImages = await filesToImages((item.files||[]).concat(item.objFiles||[]));
+      const prompt = buildPrompt2Sub(rubric, item.name, item.cls, subQ); // ← 使用 Prompt2（仅主观题）
+      const sub = await callAPI(prompt, allImages);
+      subDetails = sub.每道题批改明细 || [];
+      subErrors  = sub.错题列表 || [];
+      subAdvice  = sub.个人学情建议 || '';
+    }catch(e){
+      // 主观题 AI 调用失败：客观题分数仍保留，主观题标记为待人工复核
+      log('⚠️ 主观题批改失败（客观题已保留）：'+e.message);
+      subQ.forEach(q=>{
+        subDetails.push({题号:q.题号, 本题满分:q.本题满分, 学生得分:'', 学生作答摘要:'（主观题自动批改失败，待教师复核）', 得分说明:'AI 调用异常：'+e.message});
+      });
+      subAdvice = '主观题未能自动批改（' + e.message + '），建议教师人工复核主观题部分。';
+    }
   }
 
   // ③ 合并：明细 + 错题，重算总分/正确率（满分只计本次评阅的题目）
@@ -1329,6 +1354,46 @@ async function gradeOne(item){
   if(!item.cls && result.班级){ item.cls = result.班级; }
 
   return result;
+}
+
+/* 按题号索引数组（用于合并去重） */
+function indexByNo(arr){
+  const m={}; (arr||[]).forEach(q=>{ const no=(q.题号||'').trim(); if(no) m[no]=q; }); return m;
+}
+/* 合并同一学生的两次批改结果（如先批客观、再批主观，或反之）
+ * base: 已存在的 result；incoming: 新生成的 result
+ * 规则：以题号为主键，incoming 覆盖 base 同题号项，base 补齐 incoming 没有的题；
+ *       删除「批改模式」标签（合并后即完整试卷）；重新计算总分与统计。 */
+function mergeStudentResult(base, incoming){
+  const baseD = indexByNo(base.每道题批改明细);
+  const incD  = indexByNo(incoming.每道题批改明细);
+  const mergedDetails = Object.values({...baseD, ...incD});
+  const baseE = indexByNo(base.错题列表);
+  const incE  = indexByNo(incoming.错题列表);
+  const mergedErr = Object.values({...baseE, ...incE});
+  const merged = {
+    学生姓名: incoming.学生姓名 || base.学生姓名 || '',
+    班级:     incoming.班级 || base.班级 || '',
+    实际得分: '',
+    试卷满分: (mergedDetails.reduce((s,q)=> s + (parseFloat(q.本题满分)||0), 0)).toString(),
+    每道题批改明细: mergedDetails,
+    错题列表: mergedErr,
+    个人作业统计: {},
+    个人学情建议: (incoming.个人学情建议 || '') || (base.个人学情建议 || '')
+  };
+  delete merged.批改模式;   // 合并后即视为完整试卷
+  recomputeStudent(merged);
+  return merged;
+}
+/* 查找合并目标：同一姓名；未命名学生仅当恰好 1 条时才合并，避免误并不同学生 */
+function findMergeTarget(name){
+  const key = (name||'').trim();
+  if(key === ''){
+    const unnamed = state.students.filter(s => !((s.meta.name||'').trim()));
+    return unnamed.length === 1 ? state.students.indexOf(unnamed[0]) : -1;
+  }
+  const same = state.students.filter(s => ((s.meta.name||'').trim()) === key);
+  return same.length >= 1 ? state.students.indexOf(same[same.length-1]) : -1;
 }
 $('btnClearStudents').addEventListener('click',()=>{
   if(!confirm('确定清空所有已批改结果？')) return;
