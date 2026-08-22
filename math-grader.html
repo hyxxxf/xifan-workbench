@@ -511,6 +511,7 @@ const PROMPT1 = `你是初中数学参考答案解析专家。
 4.如果原始参考答案没有给出分步细则，按照初中数学中考通用阅卷规则自动生成合理步骤分值。
 5.遇到印刷模糊、遮挡、看不清的内容，标记为“识别不足，需要教师手动修正”，禁止编造答案、编造分值。
 6.识别不到的字段留空字符串。
+7.必须输出完整题目评分列表：不得省略任何一题，即使参考答案只给出最终答案，也要按初中数学通用阅卷规则补全该题的分步评分细则；若省略或输出被截断，将导致评分标准缺失、无法生成逐题编辑表格。
 
 严格只输出JSON，不要任何解释、前言、总结。
 输出字段：
@@ -1045,9 +1046,24 @@ function renderRubric(){
     });
   });
 
-  const list=r.题目评分列表||(r.题目评分列表=[]);
+  let list=r.题目评分列表;
+  if(!list || !list.length){
+    // AI 未返回逐题明细（常见于参考答案只给最终答案、或模型输出被截断）：
+    // 按“总题数”自动生成空题行，便于教师手动补充每题的标准答案与分值。
+    const m=(info.总题数||'').match(/(\d+)/);
+    const n=m?parseInt(m[1],10):0;
+    if(n>0 && n<=60){
+      list=r.题目评分列表=[];
+      for(let i=1;i<=n;i++){
+        list.push({题号:String(i),题型:'客观题',本题满分:'',标准答案:'',分步评分细则:[]});
+      }
+      setStatus($('rubricConfirmStatus'),'⚠️ AI 未返回逐题评分明细，已按总题数 '+n+' 自动生成空题行，请老师手动补充每题的标准答案与分值。','warn');
+    }else{
+      setStatus($('rubricConfirmStatus'),'⚠️ 未能解析出逐题评分明细，请点「＋ 新增题目」手动添加，或重新上传更清晰的参考答案。','warn');
+    }
+  }
   const wrap=$('rubricList'); wrap.innerHTML='';
-  list.forEach((q,qi)=> wrap.appendChild(renderQuestion(q,qi)));
+  (list||[]).forEach((q,qi)=> wrap.appendChild(renderQuestion(q,qi)));
 }
 function renderQuestion(q,qi){
   const div=document.createElement('div');
