@@ -647,7 +647,8 @@ const NAV=[
   {ch:'📅',name:'课程表',view:'schedule'},
   {ch:'✅',name:'考勤',view:'attendance'},
   {ch:'🚨',name:'应急备忘',view:'emergency'},
-  {ch:'🗂️',name:'档案归档',view:'archive'}
+  {ch:'🗂️',name:'档案归档',view:'archive'},
+  {ch:'📝',name:'AI阅卷',view:'grading'}
 ];
 /* 导航图标顺序（本地记忆，可拖动排序） */
 const NAV_ORDER_KEY='xifan_nav_order';
@@ -700,7 +701,7 @@ function showView(v){
   $$('#sidebar .nav-item').forEach(e=>e.classList.toggle('active',e.dataset.view===v));
   const map={home:renderHome,students:renderStudents,seats:renderSeats,grades:renderGrades,duty:renderDuty,
     contact:renderContact,knowledge:renderKnowledge,schedule:renderSchedule,attendance:renderAttendance,
-    emergency:renderEmergency,archive:renderArchive};
+    emergency:renderEmergency,archive:renderArchive,grading:renderGrading};
   const c=$('#content');
   c.innerHTML=`<div class="view active" id="v_${v}"></div>`;
   (map[v]||renderHome)($('#v_'+v));
@@ -767,7 +768,10 @@ function renderHome(root){
     <!-- 实时时钟 -->
     <div class="card clock-banner">
       <div class="clock-icon">🕘</div>
-      <div class="clock-time" id="homeClock">--  :  --  :  --</div>
+      <div style="flex:1">
+        <div class="clock-time" id="homeClock">--  :  --  :  --</div>
+        <div id="homeLunar" style="font-size:13px;color:var(--muted);margin-top:6px">加载中…</div>
+      </div>
     </div>
 
     <!-- 快捷功能 -->
@@ -818,7 +822,7 @@ function renderHome(root){
   renderHomeReminder();
 }
 
-/* 首页：实时时钟 */
+/* 首页：实时时钟 + 农历 */
 function renderHomeClock(){
   function tick(){
     const el=document.getElementById('homeClock');
@@ -828,6 +832,17 @@ function renderHomeClock(){
     const mm=String(d.getMinutes()).padStart(2,'0');
     const ss=String(d.getSeconds()).padStart(2,'0');
     el.textContent=`${hh}  :  ${mm}  :  ${ss}`;
+    // 农历
+    const lunar=document.getElementById('homeLunar');
+    if(lunar){
+      const l=solarToLunar(d.getFullYear(),d.getMonth()+1,d.getDate());
+      if(l){
+        const gzY='甲乙丙丁戊己庚辛壬癸'[(l.ly-4)%10]+'子丑寅卯辰巳午未申酉戌亥'[(l.ly-4)%12];
+        lunar.textContent=`${gzY}年 · ${LMN[l.lm]||''}${LDN[l.ld]||'—'} · 星期${['日','一','二','三','四','五','六'][d.getDay()]}`;
+      } else {
+        lunar.textContent=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 · 星期${['日','一','二','三','四','五','六'][d.getDay()]}`;
+      }
+    }
   }
   tick();
   if(window._homeClockTimer)clearInterval(window._homeClockTimer);
@@ -1122,6 +1137,44 @@ function renderEmergency(root){
   <div class="tab-content" data-tc="info" id="emInfo"></div>`;
   bindTabs(root);
   renderEmAll();renderEmFlow();renderEmContact();renderEmInfo();
+}
+
+/* ============================================================
+   模块：AI阅卷（加载 math-grader.html）
+   ============================================================ */
+function renderGrading(root){
+  root.innerHTML=`
+  <div style="height:100%;display:flex;flex-direction:column;overflow:hidden">
+    <div id="gradingWrap" style="flex:1;overflow:auto;display:none">
+      <iframe id="gradingFrame"
+        style="width:100%;height:1400px;border:none;display:block"
+        src=""></iframe>
+    </div>
+    <div id="gradingLoading" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:15px">
+      <div style="text-align:center">⏳ 正在加载阅卷系统…<br><span style="font-size:12px;color:var(--muted)">首次加载可能需要 2~3 秒</span></div>
+    </div>
+    <div id="gradingError" style="flex:1;display:none;align-items:center;justify-content:center;color:var(--danger);text-align:center;font-size:14px;padding:30px"></div>
+  </div>`;
+  const f=$('#gradingFrame'), wrap=$('#gradingWrap'), ld=$('#gradingLoading'), err=$('#gradingError');
+  // 构建 math-grader.html 的同目录绝对路径
+  let src;
+  if(location.protocol==='file:'){
+    // file:///D:/希凡工作台/index.html → file:///D:/希凡工作台/math-grader.html
+    const p = location.href.replace(/index\.html$/i,'math-grader.html');
+    src = p;
+  } else {
+    src = 'math-grader.html';
+  }
+  f.src = src;
+  f.onload = ()=>{
+    ld.style.display='none';
+    wrap.style.display='block';
+  };
+  f.onerror = ()=>{
+    ld.style.display='none';
+    err.style.display='flex';
+    err.textContent='❌ 加载阅卷系统失败。\n请确认文件 ' + src + ' 存在，然后刷新页面。';
+  };
 }
 function renderEmAll(){
   const box=$('#emAll');if(!box)return;
@@ -1879,24 +1932,82 @@ function openStats(){
     <div class="actions"><button class="btn primary" data-action="close-modal">关闭</button></div>`);
 }
 
-/* 日历弹窗 */
-function openCalendar(){
-  const now=new Date();const y=now.getFullYear(),m=now.getMonth();
+/* ============================================================
+   农历转换（v2 · 1900-2100）
+   ============================================================ */
+const LUNAR_DATA=[0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x054a8,0x0da52,0x07552,0x056a0,0x09ae6,0x055d4,0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,0x06566,0x0d4a0,0x0ea50,0x06e95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,0x06ca0,0x0b550,0x15355,0x04da0,0x0a5b0,0x14573,0x052b0,0x0a9a8,0x0e950,0x06aa0,0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b271,0x06a50,0x06d45,0x0af46,0x0ab60,0x09570,0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x05ac0,0x0ab60,0x096d5,0x092e0,0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ae0,0x0a5b4,0x0a4d0,0x0d250,0x1d255,0x0d520,0x0dd45,0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0,0x14b63,0x09370,0x049f8,0x04970,0x064b0,0x168a6,0x0ea50,0x06b50,0x0a6b6,0x0aa50,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b271,0x06a50,0x06d45,0x0af46,0x0ab60,0x09570,0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x05ac0,0x0ab60,0x096d5,0x092e0,0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ae0,0x0a5b4,0x0a4d0];
+// 已验证春节日期（网页核实，锚点法提高精度）
+const CNY_ANCHORS={1900:[1,30],1989:[2,6],1990:[1,27],2000:[2,5],2020:[1,25],2021:[2,12],2022:[2,1],2023:[1,22],2024:[2,10],2025:[1,29],2026:[2,17]};
+const LMN=['','正月','二月','三月','四月','五月','六月','七月','八月','九月','十月','冬月','腊月'];
+const LDN=['','初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+const TZT='甲乙丙丁戊己庚辛壬癸',SZZ='子丑寅卯辰巳午未申酉戌亥';
+function _lym(y){return LUNAR_DATA[y-1900]&0xf;}
+function _lmd(y,m){const lm=_lym(y);const shift=(lm>0&&m>lm)?m-1:m;return(LUNAR_DATA[y-1900]&(0x10000>>shift))?30:29;}
+function _lyd(y){let s=348;for(let i=0x8000;i>0x8;i>>=1)s+=(LUNAR_DATA[y-1900]&i)?1:0;const lm=_lym(y);if(lm>0){s+=29;s+=(LUNAR_DATA[y-1900]&(0x10000>>lm))?1:0;}return s;}
+function solarToLunar(y,m,d){
+  if(y<1900||y>2099)return null;
+  const target=new Date(y,m-1,d);target.setHours(0,0,0,0);
+  // 找最近的已验证春节锚点
+  let ay=1900;const yrs=Object.keys(CNY_ANCHORS).map(Number).sort((a,b)=>a-b);
+  for(const a of yrs){const[am,ad]=CNY_ANCHORS[a];if(new Date(a,am-1,ad)<=target)ay=a;else break;}
+  const[am,ad]=CNY_ANCHORS[ay];
+  let off=Math.floor((target-new Date(ay,am-1,ad))/86400000);
+  let ly=ay;
+  for(;ly<2100;ly++){const tmp=_lyd(ly);if(off<tmp)break;off-=tmp;}
+  const lp=_lym(ly);let iM,leap=0;
+  for(iM=1;iM<14;iM++){if(lp>0&&iM===lp+1&&!leap){iM--;leap=1;}const tmp=_lmd(ly,iM);if(off<tmp)break;off-=tmp;}
+  const ld=off+1;
+  if(ld<1||ld>30)return null;
+  return{ly,lm:iM,ld};
+}
+function lunarFullStr(l){
+  if(!l)return'';
+  const gz=TZT[(l.ly-4)%10]+SZZ[(l.ly-4)%12];
+  return gz+'年 '+LMN[l.lm]+LDN[l.ld];
+}
+function lunarDayStr(l){
+  if(!l)return'';return LDN[l.ld]||'';
+}
+
+/* 日历弹窗（含农历 + 点击日期添加待办） */
+let calState={y:1900,m:0};
+function openCalendar(y,m){
+  if(y===undefined){const now=new Date();y=now.getFullYear();m=now.getMonth();}
+  calState.y=y;calState.m=m;
   const first=new Date(y,m,1).getDay();const days=new Date(y,m+1,0).getDate();
+  const todayStr=new Date().toISOString().slice(0,10);
   let cells='';
   for(let i=0;i<(first===0?6:first-1);i++)cells+='<div></div>';
-  const todayStr=now.toISOString().slice(0,10);
-  for(let d=1;d<=days;d++){const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  for(let d=1;d<=days;d++){
+    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const l=solarToLunar(y,m+1,d);
+    const lunarText=l?lunarDayStr(l):'';
+    const lunarFull=l?lunarFullStr(l):'';
     const has=DB.todos.filter(t=>!t.done&&!t.archived&&t.deadline===ds).length;
-    cells+=`<div style="border:1px solid var(--border);border-radius:8px;padding:8px;min-height:64px;background:${ds===todayStr?'var(--chip)':''}">
-      <div style="font-weight:700">${d}</div>${has?`<div class="tag red" style="margin-top:4px">${has} 待办</div>`:''}</div>`;}
+    cells+=`<div class="cal-day" data-date="${ds}" data-lunar="${lunarFull}" onclick="openAddTodoModal('${ds}','${lunarFull}')" style="border:1px solid var(--border);border-radius:8px;padding:6px 4px;min-height:56px;background:${ds===todayStr?'var(--chip)':'var(--card)'};cursor:pointer;text-align:center">
+      <div style="font-weight:700;font-size:14px">${d}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.2">${lunarText}</div>
+      ${has?`<div class="tag red" style="margin-top:3px;font-size:10px">${has}</div>`:''}</div>`;
+  }
   const due=DB.todos.filter(t=>!t.done&&!t.archived&&t.deadline&&t.deadline<todayStr);
-  openModal(`<h3>📅 ${y}年 ${m+1}月</h3>
-    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px">
-      ${['一','二','三','四','五','六','日'].map(x=>`<div style="text-align:center;font-weight:700;color:var(--muted)">${x}</div>`).join('')}
+  openModal(`<h3>📅 ${y}年 ${m+1}月 <span style="font-size:13px;color:var(--muted);font-weight:400">（点击日期添加待办）</span></h3>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:12px 0">
+      ${['一','二','三','四','五','六','日'].map(x=>`<div style="text-align:center;font-weight:700;color:var(--muted);font-size:12px">${x}</div>`).join('')}
       ${cells}</div>
-    ${due.length?`<div class="muted">已逾期待办 ${due.length} 项，请及时跟进。</div>`:'<div class="muted">无逾期待办，继续保持～</div>'}
-    <div class="actions"><button class="btn primary" data-action="close-modal">关闭</button></div>`);
+    ${due.length?`<div class="muted" style="font-size:12px">⚠️ 已逾期待办 ${due.length} 项，请及时跟进。</div>`:'<div class="muted" style="font-size:12px">无逾期待办，继续保持～</div>'}
+    <div class="actions"><button class="btn" data-action="cal-prev">◀ 上月</button><button class="btn primary" data-action="cal-today">今天</button><button class="btn" data-action="cal-next">下月 ▶</button></div>`);
+}
+function openAddTodoModal(ds, lunarFull){
+  lunarFull=lunarFull||'';
+  openModal(`
+    <h3>📝 添加待办</h3>
+    <div style="font-size:12px;color:var(--muted);margin:6px 0 14px;background:var(--chip);padding:8px 12px;border-radius:8px">📅 ${ds}　${lunarFull}</div>
+    <div class="field"><label>事项</label><input id="calTodoTitle" placeholder="如：批改数学试卷" style="width:100%"></div>
+    <div class="field" style="display:flex;gap:8px;margin-top:10px">
+      <div style="flex:1"><label>分类</label><select id="calTodoTag" style="width:100%"><option>班级事务</option><option>家校沟通</option><option>材料上交</option><option>安全排查</option></select></div>
+    </div>
+    <input type="hidden" id="calTodoDate" value="${ds}">
+    <div class="actions"><button class="btn" data-action="close-modal">取消</button><button class="btn primary" data-action="cal-add-todo" data-date="${ds}">保存</button></div>`);
 }
 
 /* ============================================================
@@ -1927,6 +2038,17 @@ document.addEventListener('click',e=>{
   if(act==='toggle'){const id=el.closest('.item').dataset.id;const t=DB.todos.find(x=>x.id===id);t.done=!t.done;save();refreshTodoModal();renderHomeReminder();return;}
   if(act==='archive'){const id=el.closest('.item').dataset.id;DB.todos.find(x=>x.id===id).archived=true;save();refreshTodoModal();renderHomeReminder();return;}
   if(act==='del'){const id=el.closest('.item').dataset.id;DB.todos=DB.todos.filter(x=>x.id!==id);save();refreshTodoModal();renderHomeReminder();return;}
+
+  /* ---- 日历 ---- */
+  if(act==='cal-prev'){calState.m--;if(calState.m<0){calState.m=11;calState.y--;}openCalendar(calState.y,calState.m);return;}
+  if(act==='cal-next'){calState.m++;if(calState.m>11){calState.m=0;calState.y++;}openCalendar(calState.y,calState.m);return;}
+  if(act==='cal-today'){const now=new Date();openCalendar(now.getFullYear(),now.getMonth());return;}
+  if(act==='cal-add-todo'){
+    const title=$('#calTodoTitle').value.trim();
+    if(!title){toast('请输入待办内容');return;}
+    DB.todos.push({id:uid(),title,deadline:el.dataset.date,tag:$('#calTodoTag').value,done:false,archived:false,createdAt:Date.now()});
+    save();toast('✅ 已添加待办');closeModal();openCalendar(calState.y,calState.m);return;
+  }
 
   /* ---- 话术 ---- */
   if(act==='ph-add'||act==='ct-ph-add'){openPhModal();return;}
