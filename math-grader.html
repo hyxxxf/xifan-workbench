@@ -732,15 +732,15 @@ async function callAPI(promptText, images){
   }
 
   // 请求出口：本地代理 > 公共代理前缀 > 直连
-  // 环境自适应：若网页运行在 https/http 托管环境（非 file://），大模型接口一般自带
-  // CORS 放行（Access-Control-Allow-Origin:*），可直接调用，无需本地代理；
-  // 只有本地 file:// 打开时才需要本地代理或公共代理来绕开跨域。
-  const isServed = (location.protocol !== 'file:');
+  // 优先级说明：
+  //   ① 勾选「使用本地代理」→ 始终走本地 Node 代理（无论 file:// 还是 https 托管环境）
+  //   ② 有公共代理前缀 → 走公共 CORS 代理
+  //   ③ 都没有 → 直连（仅当 API 服务端自带 CORS 头时可用）
   let url, reqHeaders = {'Content-Type':'application/json','Authorization':'Bearer '+apiKey};
-  if(state.api.useLocalProxy && !isServed){
-    // ② 本地 Node 代理（仅 file:// 场景需要）：浏览器只与 localhost 通信（代理回送 CORS 头），
-    //    由代理以服务端身份转发到真实接口，彻底绕开浏览器跨域。Base URL 仍填真实地址。
-    //    代理可能因端口占用自动切换到 3001/3002...，前端自动扫描发现实际端口。
+  if(state.api.useLocalProxy){
+    // 本地 Node 代理：浏览器只与 localhost 通信（代理回送 CORS 头），
+    // 由代理以服务端身份转发到真实接口，彻底绕开浏览器跨域。Base URL 仍填真实地址。
+    // 代理可能因端口占用自动切换到 3001/3002...，前端自动扫描发现实际端口。
     const proxyPort = await detectLocalProxyPort();
     if(!proxyPort){
       throw new Error('本地代理未运行：请在「① API 设置」点「🚀 一键启动本地代理」下载脚本并双击运行，保持窗口开启后再试');
