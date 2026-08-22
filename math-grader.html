@@ -293,7 +293,7 @@ const server = http.createServer((req, res) => {
       <input id="cfgKey" type="password" placeholder="sk-...">
 
       <label>CORS 代理前缀（可选 · 公共代理用）</label>
-      <input id="cfgProxy" placeholder="如 https://<你的worker>.workers.dev/?url=  或含 {url} 占位符的地址">
+      <input id="cfgProxy" placeholder="如 https://proxy.killcors.com?url=  或留空使用默认">
 
       <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--txt)">
         <input type="checkbox" id="cfgLocalProxy" style="width:auto"> 使用本地代理（Base URL 仍填真实地址即可）
@@ -483,7 +483,7 @@ const server = http.createServer((req, res) => {
  *  全局状态
  * =======================================================================*/
 const state = {
-  api: { baseURL:'https://token.sensenova.cn/v1', apiKey:'', model:'', proxy:'https://xifan-cors-proxy.nqsxxx.workers.dev/?url=', useLocalProxy:false, responseFormat:true },
+  api: { baseURL:'https://token.sensenova.cn/v1', apiKey:'', model:'', proxy:'https://proxy.killcors.com?url=', useLocalProxy:false, responseFormat:true },
   rubric: null,            // 解析+教师校对后的评分标准（即 Prompt1 的输出结构）
   rubricConfirmed: false,  // 是否确认启用（未确认不允许批改）
   queue: [],               // 待批改队列：{name, cls, files:[File]}
@@ -930,7 +930,7 @@ function loadAll(){
     // 迁移：旧配置若仍用本地代理，自动切到公共 CORS 代理（无需本机 Node/端口）
     if(state.api.useLocalProxy){
       state.api.useLocalProxy=false;
-      if(!state.api.proxy) state.api.proxy='https://xifan-cors-proxy.nqsxxx.workers.dev/?url=';
+      if(!state.api.proxy) state.api.proxy='https://proxy.killcors.com?url=';
       try{ localStorage.setItem('mg_api', JSON.stringify(state.api)); }catch(e){}
     }
     const r=localStorage.getItem('mg_rubric'); if(r) state.rubric=JSON.parse(r);
