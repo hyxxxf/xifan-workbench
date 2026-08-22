@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>初中数学 AI 阅卷系统（网页版）</title>
+
+<!--
+  PDF 前端解析依赖 pdf.js（按需求#3 使用 pdf-js 在浏览器内解析 PDF）。
+  从 CDN 引入；若需完全离线，可把这两个文件下载到本地并改成相对路径。
+  注意：本系统“无后端”，所有大模型调用均由浏览器前端 JS 直接发起。
+-->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<!-- 内嵌本地 CORS 代理源码（零依赖 Node 脚本），供“一键启动代理”按钮生成自包含启动脚本 -->
+<script type="text/plain" id="proxySrc">
+/**
+ * 本地 CORS 代理（零依赖，仅用 Node 内置模块）
+ * 让纯前端网页绕过浏览器对大模型接口的跨域(CORS)限制。
+ * 浏览器 ─HTTP─> 本机 :3000(此代理) ─服务端转发─> 真实大模型 API
+ */
+const http  = require('http');
+const https = require('https');
+const { URL } = require('url');
+
+const START_PORT = parseInt(process.env.PORT, 10) || 3000;
+const MAX_PORT_ATTEMPTS = 10;
+const DEFAULT_UPSTREAM = (process.env.UPSTREAM || '').replace(/\/$/, '');
+let actualPort = START_PORT;
+const START_AT = Date.now();
+
+function isPortInUse(port) {
+  return new Promise((resolve) => {
+    const tester = http.createServer().once('error', (err) => {
+      resolve(err.code === 'EADDRINUSE');
+    }).once('listening', () => { tester.close(); resolve(false); }).listen(port, '127.0.0.1');
+  });
+}
+async function findPort() {
+  for (let i = 0; i < MAX_PORT_ATTEMPTS; i++) {
+    const p = START_PORT + i;
+    if (!(await isPortInUse(p))) return p;
+    console.log(`   端口 ${p} 被占用，继续尝试...`);
+  }
+  return null;
+}
+
+const server = http.createServer((req, res) => {
+  const ts = new Date().toLocaleTimeString();
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-upstream');
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
+  if (req.url === '/' || req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ ok: true, proxy: 'math-grader-local-cors-proxy', port: actualPort, startAt: START_AT }));
+  }
+  const upstream = (req.headers['x-upstream'] || DEFAULT_UPSTREAM).replace(/\/$/, '');
+  if (!upstream) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('缺少 x-upstream 请求头或 UPSTREAM 环境变量');
+  }
+  const chunks = [];
+  req.on('data', c => chunks.push(c));
+  req.on('end', () => {
+    const body = chunks.length ? Buffer.concat(chunks) : null;
+    let target;
+    try { target = new URL(upstream.replace(/\/$/, '') + req.url); }
+    catch (e) { res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('上游地址解析失败: ' + e.message); }
+    const options = { method: req.method, headers: { ...req.headers, host: target.host } };
+    delete options.headers['x-upstream'];
+    delete options.headers['access-control-request-headers'];
+    delete options.headers['access-control-request-method'];
+    delete options.headers['origin'];
+    delete options.headers['referer'];
+    delete options.headers['connection'];
+    const TIMEOUT_MS = 300000;
+    const proto = target.protocol === 'http:' ? http : https;
+    const p = proto.request(target, options);
+    p.setTimeout(TIMEOUT_MS);
+    p.on('response', (upRes) => {
+      upRes.setTimeout(TIMEOUT_MS);
+      upRes.on('timeout', () => { upRes.destroy(); if (!res.headersSent) { res.writeHead(504, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('上游响应读取超时'); } });
+      const hopByHop = new Set(['connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailers','transfer-encoding','upgrade','content-encoding','content-length']);
+      const outHeaders = { 'access-control-allow-origin': '*' };
+      for (const [k, v] of Object.entries(upRes.headers)) { if (!hopByHop.has(k.toLowerCase())) outHeaders[k] = v; }
+      outHeaders['content-encoding'] = 'identity';
+      res.writeHead(upRes.statusCode, outHeaders);
+      upRes.pipe(res);
+    });
+    p.on('error', (e) => { if (!res.headersSent) { res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' }); } res.end('代理转发失败: ' + e.message); });
+    p.on('timeout', () => { p.destroy(); if (!res.headersSent) { res.writeHead(504, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('上游请求超时'); } });
+    if (body) p.write(body);
+    p.end();
+  });
+});
+
+(async () => {
+  const port = await findPort();
+  if (!port) { console.error(`端口 ${START_PORT}~${START_PORT+MAX_PORT_ATTEMPTS-1} 均被占用`); process.exit(1); }
+  actualPort = port;
+  server.listen(actualPort, '127.0.0.1', () => {
+    console.log('✅ 本地 CORS 代理已启动: http://127.0.0.1:' + actualPort);
+    console.log('   前端 Base URL 保持真实地址，并勾选“使用本地代理”。关闭本窗口即停止。');
+  });
+  server.on('error', (err) => { console.error('❌ 代理启动失败:', err.message); process.exit(1); });
+})();
+</script>
+
+<style>
+  :root{
+    --bg:#f5f7fa; --card:#ffffff; --line:#e3e8ef; --txt:#1f2937;
+    --muted:#6b7280; --primary:#2563eb; --primary-d:#1d4ed8;
+    --ok:#16a34a; --warn:#d97706; --bad:#dc2626; --soft:#eef4ff;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+       background:var(--bg);color:var(--txt);font-size:15px;line-height:1.5;}
+  header{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;
+         padding:16px 22px;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+  header h1{margin:0;font-size:20px;}
+  header p{margin:4px 0 0;opacity:.9;font-size:13px;}
+
+  .tabs{display:flex;gap:6px;background:#fff;border-bottom:1px solid var(--line);
+        padding:0 14px;position:sticky;top:0;z-index:20;flex-wrap:wrap;}
+  .tab{padding:12px 16px;cursor:pointer;font-weight:600;color:var(--muted);
+       border-bottom:3px solid transparent;user-select:none;}
+  .tab:hover{color:var(--primary);}
+  .tab.active{color:var(--primary);border-bottom-color:var(--primary);}
+  .tab.disabled{opacity:.4;cursor:not-allowed;}
+
+  .wrap{max-width:1080px;margin:18px auto;padding:0 16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+        padding:18px;margin-bottom:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .card h2{margin:0 0 12px;font-size:17px;display:flex;align-items:center;gap:8px;}
+  .card h2 .step{background:var(--primary);color:#fff;border-radius:50%;
+        width:24px;height:24px;display:inline-flex;align-items:center;
+        justify-content:center;font-size:13px;}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px;}
+  input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);
+        border-radius:8px;font-size:14px;font-family:inherit;background:#fff;color:var(--txt);}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);
+        box-shadow:0 0 0 3px rgba(37,99,235,.12);}
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .row > div{flex:1;min-width:160px;}
+
+  button{cursor:pointer;border:none;border-radius:8px;padding:10px 16px;
+    font-size:14px;font-weight:600;font-family:inherit;transition:.15s;}
+  .btn-primary{background:var(--primary);color:#fff;}
+  .btn-primary:hover{background:var(--primary-d);}
+  .btn-primary:disabled{background:#9db8f0;cursor:not-allowed;}
+  .btn-ghost{background:#fff;color:var(--primary);border:1px solid var(--primary);}
+  .btn-ghost:hover{background:var(--soft);}
+  .btn-danger{background:#fff;color:var(--bad);border:1px solid var(--bad);}
+  .btn-danger:hover{background:#fdeaea;}
+  .btn-sm{padding:6px 10px;font-size:13px;}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center;}
+
+  .hint{font-size:12.5px;color:var(--muted);background:var(--soft);
+        border-left:3px solid var(--primary);padding:8px 12px;border-radius:6px;margin:8px 0;}
+  .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;}
+  .badge-ok{background:#dcfce7;color:var(--ok);}
+  .badge-warn{background:#fef3c7;color:var(--warn);}
+  .badge-bad{background:#fee2e2;color:var(--bad);}
+  .badge-info{background:var(--soft);color:var(--primary);}
+  .mini-pie{display:inline-flex;align-items:center;gap:6px;}
+  .mini-pie svg{width:28px;height:28px;}
+  .mini-pie-text{font-size:12px;font-weight:600;color:var(--txt);}
+
+  /* 学生作业批改页：客观/主观题分区 */
+  .sub-card{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0;border-left:4px solid var(--primary);}
+  .sub-card h3{margin:0 0 10px;font-size:15px;color:var(--primary);display:flex;align-items:center;gap:6px;}
+  .type-summary{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0 14px;}
+  .type-summary span{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:12px;}
+  .type-summary b{color:var(--primary);}
+  /* 批改模式选择器 */
+  .mode-box{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:12px 0;}
+  .mode-box > label{font-weight:600;font-size:13px;color:var(--txt);}
+  .mode-opts{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;}
+  .mode-opt{display:flex;align-items:center;gap:6px;padding:8px 14px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;cursor:pointer;font-size:13.5px;transition:all .12s;}
+  .mode-opt:hover{border-color:var(--primary);}
+  .mode-opt:has(input:checked){background:var(--soft);border-color:var(--primary);font-weight:600;color:var(--primary);}
+  .mode-opt input{accent-color:var(--primary);}
+  .sub-card.disabled{opacity:.45;filter:grayscale(.4);pointer-events:none;}
+
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13.5px;}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top;}
+  th{background:#f1f5f9;font-weight:700;white-space:nowrap;}
+  .qblock{border:1px solid var(--line);border-radius:10px;padding:12px;margin:10px 0;background:#fcfdff;}
+  .qblock.doubt{border-color:var(--warn);background:#fffbf2;}
+  .steprow{display:flex;gap:8px;align-items:center;margin:6px 0;}
+  .steprow input{flex:1;}
+  .doubt-flag{color:var(--warn);font-weight:700;font-size:13px;margin-left:6px;}
+
+  .status{margin-top:10px;font-size:13px;color:var(--muted);min-height:20px;}
+  .status.err{color:var(--bad);}
+  .status.ok{color:var(--ok);}
+  .log{background:#0f172a;color:#cbd5e1;font-family:ui-monospace,Menlo,Consolas,monospace;
+       font-size:12px;padding:10px;border-radius:8px;max-height:160px;overflow:auto;margin-top:8px;white-space:pre-wrap;}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+        background:#eef2f7;font-size:13px;margin:4px 4px 0 0;}
+  .pill b{color:var(--primary);}
+  .hidden{display:none !important;}
+  .accordion{border:1px solid var(--line);border-radius:10px;margin:10px 0;overflow:hidden;}
+  .acc-head{background:#f8fafc;padding:11px 14px;cursor:pointer;font-weight:600;
+            display:flex;justify-content:space-between;align-items:center;}
+  .acc-body{padding:12px 14px;display:none;border-top:1px solid var(--line);}
+  .accordion.open .acc-body{display:block;}
+  .progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden;margin-top:8px;}
+  .progress > div{height:100%;background:var(--primary);width:0;transition:width .2s;}
+  .kv{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0;}
+  .kv > div{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:120px;}
+  .kv b{display:block;color:var(--muted);font-size:12px;font-weight:500;}
+  .kv span{font-size:16px;font-weight:700;}
+
+  /* 班级学情报告图表 */
+  .chart-row{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0;}
+  .chart-box{flex:1;min-width:260px;background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .chart-box h4{margin:0 0 14px;font-size:14px;color:var(--muted);font-weight:600;}
+  .chart-pie-wrap{display:flex;align-items:center;gap:18px;justify-content:center;}
+  .chart-pie{width:150px;height:150px;border-radius:50%;position:relative;}
+  .chart-pie-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;margin:28px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+  .chart-pie-center b{font-size:24px;color:var(--txt);line-height:1;}
+  .chart-pie-center span{font-size:11px;color:var(--muted);margin-top:2px;}
+  .chart-legend{font-size:13px;}
+  .chart-legend > div{display:flex;align-items:center;gap:6px;margin:5px 0;}
+  .chart-legend i{width:12px;height:12px;border-radius:2px;display:inline-block;}
+  .chart-bar .bar-row{display:flex;align-items:center;margin:8px 0;font-size:13px;cursor:pointer;transition:transform .08s;}
+  .chart-bar .bar-row:hover{transform:translateX(4px);}
+  .bar-label{width:44px;text-align:right;padding-right:8px;white-space:nowrap;color:var(--muted);font-weight:500;}
+  .bar-track{flex:1;background:#e5e7eb;border-radius:6px;height:24px;overflow:hidden;position:relative;}
+  .bar-fill{height:100%;background:linear-gradient(90deg,#f87171,#dc2626);border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:12px;font-weight:600;min-width:32px;box-sizing:border-box;}
+
+  /* 错题详情弹窗 */
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;}
+  .modal-overlay.hidden{display:none;}
+  .modal-panel{background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);width:min(760px,100%);max-height:90vh;display:flex;flex-direction:column;}
+  .modal-header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);}
+  .modal-header h3{margin:0;font-size:17px;}
+  .modal-close{background:var(--soft);border:none;border-radius:8px;width:32px;height:32px;font-size:18px;cursor:pointer;color:var(--primary);}
+  .modal-close:hover{background:#dbeafe;}
+  .modal-body{padding:16px 18px;overflow-y:auto;}
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;}
+  .detail-grid > div{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:8px 10px;}
+  .detail-grid b{display:block;color:var(--muted);font-size:11px;font-weight:500;margin-bottom:2px;}
+  .detail-grid span{font-size:13px;font-weight:600;}
+  .modal-body h4{margin:12px 0 6px;font-size:14px;color:var(--txt);}
+  .wrong-list-empty{color:var(--muted);font-size:13px;text-align:center;padding:14px;background:#f8fafc;border-radius:8px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📐 初中数学 AI 阅卷系统</h1>
+  <p>纯前端 · 浏览器直接打开 · 调用多模态大模型 API · 无需后端服务器</p>
+</header>
+
+<nav class="tabs">
+  <div class="tab active" data-tab="api">① API 设置</div>
+  <div class="tab" data-tab="ref">② 参考答案解析</div>
+  <div class="tab" data-tab="grade" id="tabGrade">③ 学生作业批改</div>
+  <div class="tab" data-tab="report" id="tabReport">④ 班级学情报告</div>
+</nav>
+
+<div class="wrap">
+
+  <!-- ============================================================ -->
+  <!-- 模块 0 / 标签①：API 密钥与接口设置                            -->
+  <!-- ============================================================ -->
+  <section id="sec-api">
+    <div class="card">
+      <h2><span class="step">1</span>多模态大模型 API 设置</h2>
+      <div class="hint">
+        本系统采用 <b>OpenAI 兼容</b> 的 Chat Completions 多模态接口（支持图片 / PDF 转图片）。
+        可填写任意兼容服务，如 OpenAI(gpt-4o)、通义千问 VL、智谱 GLM-4V、Kimi、DeepSeek-VL、本地 Ollama 等。
+        接口地址填写到 <code>/chat/completions</code> 的前缀，例如 <code>https://api.openai.com/v1</code>。
+        <br>⚠️ 浏览器直连大模型可能遇到 CORS 跨域限制，若报错请使用允许浏览器跨域的 API 服务或自建反代。
+      </div>
+
+      <div class="row">
+        <div>
+          <label>API 接口地址（Base URL，不含 /chat/completions）</label>
+          <input id="cfgBase" placeholder="https://api.openai.com/v1">
+        </div>
+        <div>
+          <label>模型名称（需支持视觉/多模态）</label>
+          <input id="cfgModel" placeholder="gpt-4o">
+        </div>
+      </div>
+      <label>API Key</label>
+      <input id="cfgKey" type="password" placeholder="sk-...">
+
+      <label>CORS 代理前缀（可选 · 公共代理用）</label>
+      <input id="cfgProxy" placeholder="如 https://corsproxy.io/?url=  或含 {url} 占位符的地址">
+
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--txt)">
+        <input type="checkbox" id="cfgLocalProxy" style="width:auto"> 使用本地代理（Base URL 仍填真实地址即可）
+      </label>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn-primary btn-sm" id="btnStartProxy">🚀 一键启动本地代理</button>
+        <span class="hint" style="margin:0">点此自动生成自包含启动脚本（跨电脑/系统通用），双击运行后网页会自动连接；无需手动找 proxy.js。</span>
+      </div>
+      <div class="hint" style="margin-top:6px">
+        💡 若把本网页部署到 GitHub Pages 等 <b>https 环境</b>，大模型接口自带跨域放行，可<b>完全免代理</b>直连（取消勾选“使用本地代理”即可）。本地 file:// 打开才需要代理。
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:13px;color:var(--txt)">
+        <input type="checkbox" id="cfgResponseFormat" style="width:auto"> 使用 response_format:json_object（OpenAI 等支持；若报错请取消勾选）
+      </label>
+
+      <div class="btn-row">
+        <button class="btn-primary" id="btnSaveCfg">保存配置</button>
+        <button class="btn-ghost" id="btnTestCfg">测试连接</button>
+        <span id="cfgStatus" class="status"></span>
+      </div>
+
+      <label style="margin-top:14px">操作日志</label>
+      <div class="log" id="log">— 就绪 —</div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 标签②：第一模块 参考答案解析（对应 Prompt1）                   -->
+  <!-- ============================================================ -->
+  <section id="sec-ref" class="hidden">
+    <div class="card">
+      <h2><span class="step">2</span>上传参考答案 → AI 解析评分标准</h2>
+      <div class="hint">
+        上传参考答案的 <b>图片或多页 PDF</b>，系统调用 <b>Prompt1</b> 自动解析为结构化评分标准，
+        解析结果以可编辑表格呈现，请老师核对、修改后 <b>确认启用</b>，方可进入批改。
+      </div>
+
+      <label>参考答案文件（可多选：图片 / PDF）</label>
+      <input id="refFiles" type="file" accept="image/*,application/pdf" multiple>
+      <div class="btn-row">
+        <button class="btn-primary" id="btnParseRef">🤖 调用大模型解析参考答案</button>
+        <button class="btn-ghost" id="btnClearRef">清空重传</button>
+      </div>
+      <div class="status" id="refStatus"></div>
+      <div class="progress hidden" id="refProg"><div></div></div>
+    </div>
+
+    <div class="card hidden" id="rubricCard">
+      <h2>📝 评分标准（可编辑，请老师校对）</h2>
+
+      <div class="kv" id="rubricMeta"></div>
+
+      <div id="rubricList"></div>
+
+      <div class="btn-row">
+        <button class="btn-ghost btn-sm" id="btnAddQ">＋ 新增题目</button>
+        <button class="btn-primary" id="btnConfirmRubric">✅ 确认并启用批改</button>
+        <button class="btn-ghost" id="btnExportRubric">导出评分标准 JSON</button>
+        <span id="rubricConfirmStatus" class="status"></span>
+      </div>
+      <div class="hint" id="rubricLockedHint"></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 标签③：第二模块 学生作业批改（对应 Prompt2）                   -->
+  <!-- ============================================================ -->
+  <section id="sec-grade" class="hidden">
+    <div class="card">
+      <h2><span class="step">3</span>上传学生作业 → AI 按标准批改</h2>
+      <div class="hint">
+        需先完成“参考答案解析”并 <b>确认启用</b>。系统把每份作业拆分为<b>客观题</b>和<b>主观题</b>两类分别评阅：
+        客观题由老师录入答案后<b>前端离线判分</b>（不调模型、秒出）；主观题调用 <b>Prompt2</b> 分步批改。
+        可在上方<b>批改模式</b>中选择“完整试卷 / 仅批客观题 / 仅批主观题”，想批哪部分就批哪部分，二者可分开进行。
+      </div>
+
+      <div class="row">
+        <div><label>学生姓名（选填 · 未填时由 AI 从作业中识别）</label><input id="stuName" placeholder="如：张三"></div>
+        <div><label>班级（选填 · 未填时由 AI 从作业中识别）</label><input id="stuClass" placeholder="如：初二(3)班"></div>
+      </div>
+
+      <!-- 当前试卷题号分类速览 -->
+      <div id="typeSummary" class="type-summary"></div>
+
+      <!-- 批改模式：完整 / 仅客观 / 仅主观 -->
+      <div class="mode-box">
+        <label>批改模式（可单独批改某一部分，省时省力）</label>
+        <div class="mode-opts">
+          <label class="mode-opt"><input type="radio" name="gradeMode" value="full" checked> 完整试卷（主客观都批）</label>
+          <label class="mode-opt"><input type="radio" name="gradeMode" value="obj"> 仅批客观题</label>
+          <label class="mode-opt"><input type="radio" name="gradeMode" value="sub"> 仅批主观题</label>
+        </div>
+        <div class="hint" id="modeHint" style="margin:8px 0 0">默认“完整试卷”：客观题离线判分 + 主观题调大模型，二者合并为总分与学情。</div>
+      </div>
+
+      <!-- 客观题评阅区 -->
+      <div class="sub-card" id="objCard">
+        <h3>📝 客观题评阅（选择 / 填空）</h3>
+        <div class="hint" style="margin-top:0">
+          此区域只处理题型为“客观题 / 选择题 / 填空题”的题目，由系统<b>离线比对标准答案</b>立即判分，零大模型调用、秒出结果。
+          请按“题号:答案”逐行录入；未填的题按 0 分计并标记【待复核】。
+          完整试卷模式下，上传的客观题作业图片会一并送给大模型作为参考。
+        </div>
+        <label>该生客观题作业文件（图片 / 多页 PDF · 可选）</label>
+        <input id="stuObjFiles" type="file" accept="image/*,application/pdf" multiple>
+        <label>客观题答案录入</label>
+        <textarea id="stuObj" rows="3" placeholder="按行填写：题号:答案&#10;例如：&#10;1:A&#10;2:3.14&#10;3:√2&#10;4:-1或2&#10;（选择/填空直接填，多解用“或”分隔）"></textarea>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn-ghost btn-sm" id="btnAutoObj">📋 从参考答案自动生成</button>
+          <span class="hint" style="margin:0">一键填入客观题标准答案，老师再改错的题为学生实际作答</span>
+        </div>
+      </div>
+
+      <!-- 主观题评阅区 -->
+      <div class="sub-card" id="subCard">
+        <h3>🖊️ 主观题评阅（计算 / 解方程 / 几何证明 / 应用题）</h3>
+        <div class="hint" style="margin-top:0">
+          此区域处理计算题、解方程、几何证明、应用题等题型。请上传该生作业图片或 PDF，系统逐页转图后调用大模型
+          <b>按解题步骤分步给分</b>；潦草手写、跳步、定理错误等均会标注。
+        </div>
+        <label>该生主观题作业文件（图片 / 多页 PDF）</label>
+        <input id="stuFiles" type="file" accept="image/*,application/pdf" multiple>
+      </div>
+
+      <!-- 完整试卷合并评阅区 -->
+      <div class="sub-card" id="fullCard">
+        <h3>📑 学生作业文件（完整试卷）</h3>
+        <div class="hint" style="margin-top:0">
+          上传该生完整作业图片或 PDF。客观题由系统<b>离线比对标准答案</b>立即判分；主观题由大模型按解题步骤分步给分。
+          若试卷包含手写客观题，上传图片后大模型会辅助识别与核对。
+        </div>
+        <label>该生完整作业文件（图片 / 多页 PDF）</label>
+        <input id="fullFiles" type="file" accept="image/*,application/pdf" multiple>
+        <label>客观题答案录入</label>
+        <textarea id="fullObj" rows="3" placeholder="按行填写：题号:答案&#10;例如：&#10;1:A&#10;2:3.14&#10;3:√2&#10;4:-1或2&#10;（选择/填空直接填，多解用“或”分隔）"></textarea>
+        <div class="btn-row" style="margin-top:6px">
+          <button class="btn-ghost btn-sm" id="btnFullAutoObj">📋 从参考答案自动生成</button>
+          <span class="hint" style="margin:0">一键填入客观题标准答案，老师再改错的题为学生实际作答</span>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-ghost" id="btnAddStu">＋ 加入批改队列</button>
+        <span id="queueCount" class="badge badge-info">队列：0 人</span>
+        <button class="btn-primary" id="btnBatchGrade">🚀 开始批量批改</button>
+        <button class="btn-danger btn-sm" id="btnClearQueue">清空队列</button>
+      </div>
+      <div class="status" id="gradeStatus"></div>
+      <div class="progress hidden" id="gradeProg"><div></div></div>
+    </div>
+
+    <div class="card">
+      <h2>📊 全班批改结果总览</h2>
+      <div id="studentsOverview"></div>
+      <div class="btn-row">
+        <button class="btn-ghost btn-sm" id="btnExportStudents">导出全班批改 Excel</button>
+        <button class="btn-danger btn-sm" id="btnClearStudents">清空所有批改</button>
+      </div>
+    </div>
+
+    <div id="studentsDetail"></div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 标签④：第三模块 班级学情汇总（对应 Prompt3）                   -->
+  <!-- ============================================================ -->
+  <section id="sec-report" class="hidden">
+    <div class="card">
+      <h2><span class="step">4</span>班级学情汇总分析</h2>
+      <div class="hint">
+        完成若干学生批改后，点击生成报告。系统将所有学生批改结果打包，调用 <b>Prompt3</b>
+        输出：班级正确率、课堂必讲高频错题、表扬名单、重点关注提醒名单、教学建议。
+      </div>
+      <div class="btn-row">
+        <button class="btn-primary" id="btnGenReport">📈 生成班级学情报告</button>
+        <button class="btn-ghost btn-sm" id="btnExportReport">导出报告 JSON</button>
+        <span id="reportStatus" class="status"></span>
+      </div>
+    </div>
+    <div id="reportPanel"></div>
+  </section>
+
+</div>
+
+<script>
+/* =========================================================================
+ *  全局状态
+ * =======================================================================*/
+const state = {
+  api: { baseURL:'', apiKey:'', model:'', proxy:'', useLocalProxy:false, responseFormat:true },
+  rubric: null,            // 解析+教师校对后的评分标准（即 Prompt1 的输出结构）
+  rubricConfirmed: false,  // 是否确认启用（未确认不允许批改）
+  queue: [],               // 待批改队列：{name, cls, files:[File]}
+  students: []             // 已批改：{meta:{name,cls}, result:Prompt2对象}
+};
+
+/* =========================================================================
+ *  三套提示词（需求中给定的完整 prompt，原样内置）
+ *  位置标注：
+ *    PROMPT1 = 第一模块 解析参考答案
+ *    PROMPT2_TEMPLATE = 第二模块 单份作业阅卷（含待替换变量）
+ *    PROMPT3_TEMPLATE = 第三模块 全班学情汇总
+ * =======================================================================*/
+
+// ---------- Prompt1：解析教师上传的参考答案（图片/PDF） ----------
+const PROMPT1 = `你是初中数学参考答案解析专家。
+请阅读本次上传的参考答案图片或PDF文档，提取整套试卷完整结构化评分标准。
+规则：
+1.区分题型：客观题（选择题、填空题）；主观题（计算题、解方程、化简求值、几何证明、应用题）。
+2.客观题提取：题号、本题满分、标准答案。
+3.主观题尽可能拆解分步采分点：
+-计算题：去分母、移项、合并同类项、变形、代入求值、最终结果，每个有效步骤单独作为得分点。
+-几何证明：已知条件、判定条件、边角推导、逻辑推理、最终求证结论，按推理环节拆分步骤。
+-应用题：等量关系、列方程、求解、检验、答句，分别设置步骤。
+4.如果原始参考答案没有给出分步细则，按照初中数学中考通用阅卷规则自动生成合理步骤分值。
+5.遇到印刷模糊、遮挡、看不清的内容，标记为“识别不足，需要教师手动修正”，禁止编造答案、编造分值。
+6.识别不到的字段留空字符串。
+
+严格只输出JSON，不要任何解释、前言、总结。
+输出字段：
+{
+  "试卷基础信息":{
+    "试卷名称":"",
+    "年级":"七/八/九年级",
+    "试卷满分":"",
+    "总题数":""
+  },
+  "题目评分列表":[
+    {
+      "题号":"",
+      "题型":"客观题/计算题/解方程/几何证明/应用题",
+      "本题满分":"",
+      "标准答案":"",
+      "分步评分细则":[
+        {"步骤描述":"","本步骤分值":""}
+      ]
+    }
+  ]
+}`;
+
+// ---------- Prompt2：单份学生作业阅卷（图片/PDF），含变量占位 ----------
+const PROMPT2_TEMPLATE = `角色：严谨的初中数学阅卷教师。
+严格依据已经确认好的结构化评分标准批改学生作业。
+试卷名称：【试卷名称】
+年级：【七/八/九年级】
+学生姓名：【学生姓名】
+班级：【班级】
+
+## 已确认的结构化参考答案与评分标准
+【这里程序直接填入：Prompt1输出、教师校对完成的题目评分列表JSON字符串】
+
+## 硬性阅卷执行规则，必须严格遵守，不可私自改动
+1.客观题（选择、填空）：与标准答案比对，答对得本题满分，答错0分。
+手写潦草、涂改、连笔，尽力区分0与6，1与7等易混数字符号；无法明确辨认，标记【识别存疑，教师复核】，不主观猜答案判分。
+2.主观题（计算、解方程、化简、几何证明、应用题）：**采步骤分，不以最终答案作为唯一判分依据**。
+-推导、列式、变形步骤逻辑正确，即便最后计算出错，也要给予对应步骤分数。
+-定理、判定条件使用错误，该步骤不得分；几何证明跳步需要在得分说明中标注跳步。
+-应用题缺少答句、缺少检验，按照评分细则扣对应分值。
+-完全空白得0分；书写无关内容得0分；部分正确按有效步骤给分。
+3.字迹潦草、排版混乱，但算式逻辑可辨认，不得因为字迹扣分；完全无法辨认作答标记【作答无法识别】。
+4.错误归类区分：计算粗心、审题失误、概念理解错误、定理不会运用、完全不会解题。
+5.禁止随意送分，严格遵守上面的评分标准。
+
+只输出标准JSON，不要多余文字、不要闲聊，字段不允许缺失。
+输出结构：
+{
+    "学生姓名":"",
+    "班级":"",
+    "实际得分":"",
+    "试卷满分":"",
+    "每道题批改明细":[
+        {
+            "题号":"",
+            "题型":"客观题/计算题/解方程/几何证明/应用题",
+            "本题满分":"",
+            "学生得分":"",
+            "学生作答摘要":"",
+            "参考答案":"",
+            "得分说明":"逐条写明哪些步骤得分，扣分项原因，标注计算失误/跳步/概念错误等"
+        }
+    ],
+    "错题列表":[
+        {
+            "题号":"",
+            "错误类型":["计算粗心","概念理解错误","审题失误","定理不会运用","不会解题","跳步逻辑缺失"],
+            "错误简要分析":"",
+            "薄弱知识点":""
+        }
+    ],
+    "个人作业统计":{
+        "总题数":"",
+        "做对题数":"",
+        "做错题目数":"",
+        "正确率":"百分比",
+        "错误率":"百分比"
+    },
+    "个人学情建议":"简短该生初中数学薄弱点提示"
+}`;
+
+// ---------- Prompt3：全班批量学情汇总分析 ----------
+const PROMPT3_TEMPLATE = `你是初中数学任课教师，对全班作业批改结果做学情汇总分析。
+输入为全班多名学生的作业批改结果JSON数组。完成下面任务：
+1.统计班级整体正确率；统计高频错题，找出课堂必须讲解的题目，标注错误人数占比，写明学生普遍出错原因以及课堂讲解重点。
+2.生成表扬名单：选取总分优秀、解题步骤完整规范、几何逻辑严谨、本次作业进步明显的学生，写明具体表扬理由。
+3.生成重点关注提醒名单：客观描述作业事实：大量空白、基础题大面积错误、步骤严重缺失、频繁低级计算错误；只陈述作业情况，禁止人身攻击，用于课堂提醒，不是恶意批评。
+4.输出课堂教学建议：写明需要巩固的知识点，建议补充什么类型练习题。
+
+只输出JSON，不要任何多余文字。
+输出字段：
+{
+    "班级整体正确率":"",
+    "高频必讲题目":[
+        {"题号":"","错误人数占比":"","学生普遍问题":"","课堂讲解重点":""}
+    ],
+    "表扬名单":[
+        {"学生姓名":"","表扬理由":""}
+    ],
+    "重点关注提醒名单":[
+        {"学生姓名":"","存在问题":""}
+    ],
+    "课堂教学建议":""
+}`;
+
+/* =========================================================================
+ *  工具函数
+ * =======================================================================*/
+const $ = id => document.getElementById(id);
+function log(msg){
+  const el = $('log');
+  const t = new Date().toLocaleTimeString();
+  el.textContent += `\n[${t}] ${msg}`;
+  el.scrollTop = el.scrollHeight;
+}
+function setStatus(el, msg, type){
+  el.textContent = msg;
+  el.className = 'status' + (type?(' '+type):'');
+}
+
+// 容错提取 JSON（兼容模型偶发的 ```json 代码块 / 前后闲聊文字）
+function extractJSON(text){
+  if(!text) throw new Error('模型返回为空');
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if(fence) t = fence[1].trim();
+  const s = t.indexOf('{'), e = t.lastIndexOf('}');
+  if(s>-1 && e>-1 && e>s) t = t.slice(s, e+1);
+  try { return JSON.parse(t); }
+  catch(err){ throw new Error('JSON 解析失败：'+err.message+'\n原始片段：'+t.slice(0,200)); }
+}
+
+// 文件 → 图片 dataURL 数组（图片直接读；PDF 用 pdf.js 逐页转图）
+function readAsDataURL(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+async function pdfToImages(file){
+  if(!window.pdfjsLib) throw new Error('PDF解析库(pdf.js)未加载，请检查网络或改用图片上传');
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const out=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    // scale=1.5 足够看清初中数学内容，同时显著减小图片体积和上传/处理时间
+    const vp=page.getViewport({scale:1.5});
+    const canvas=document.createElement('canvas');
+    canvas.width=vp.width; canvas.height=vp.height;
+    const ctx=canvas.getContext('2d');
+    await page.render({canvasContext:ctx,viewport:vp}).promise;
+    // JPEG 质量 0.75，平衡清晰度与体积
+    out.push(canvas.toDataURL('image/jpeg',0.75));
+  }
+  return out;
+}
+async function fileToImages(file){
+  const name=(file.name||'').toLowerCase();
+  if(file.type==='application/pdf' || name.endsWith('.pdf')) return await pdfToImages(file);
+  return [await readAsDataURL(file)];
+}
+async function filesToImages(fileList){
+  const all=[];
+  for(const f of fileList) all.push(...await fileToImages(f));
+  return all;
+}
+
+/* =========================================================================
+ *  自动发现本地代理端口（扫描 3000~3009，匹配 /health 返回的代理标识）
+ *  返回可用端口数字，找不到返回 null。
+ * =======================================================================*/
+async function detectLocalProxyPort(){
+  // 扫描 3000~3009，返回最新启动的代理端口（避免旧版代理残留占住低端口被误用）
+  const found=[];
+  for(let p=3000; p<=3009; p++){
+    try{
+      const res=await fetch(`http://127.0.0.1:${p}/health`, {method:'GET', signal: AbortSignal.timeout(400)});
+      if(!res.ok) continue;
+      const data=await res.json();
+      if(data && data.ok && data.proxy==='math-grader-local-cors-proxy'){
+        found.push({port: data.port || p, startAt: data.startAt || 0});
+      }
+    }catch(e){ /* 端口未监听或超时，继续下一个 */ }
+  }
+  if(!found.length) return null;
+  found.sort((a,b)=>b.startAt-a.startAt);   // 启动时间最新的排在最前
+  return found[0].port;
+}
+
+/* =========================================================================
+ *  调用多模态大模型 API（OpenAI 兼容 /chat/completions）
+ *  promptText: 提示词文本；images: dataURL 数组
+ * =======================================================================*/
+async function callAPI(promptText, images){
+  const {baseURL, apiKey, model} = state.api;
+  if(!baseURL || !apiKey || !model) throw new Error('请先在“① API 设置”填写完整配置');
+
+  const content=[{type:'text', text:promptText}];
+  (images||[]).forEach(img=>content.push({type:'image_url', image_url:{url:img}}));
+
+  const body={
+    model,
+    messages:[
+      {role:'system', content:'你是严谨的初中数学AI阅卷系统内核，严格按照用户指令执行，只输出要求的JSON，禁止输出任何解释或闲聊。'},
+      {role:'user', content}
+    ],
+    temperature:0.2
+  };
+  // OpenAI 兼容接口的强制 JSON 开关；部分国产模型（如商汤日日新）不支持该参数，
+  // 若报错可取消勾选“使用 response_format:json_object”。
+  if(state.api.responseFormat!==false){
+    body.response_format={type:'json_object'};
+  }
+
+  // 请求出口：本地代理 > 公共代理前缀 > 直连
+  // 环境自适应：若网页运行在 https/http 托管环境（非 file://），大模型接口一般自带
+  // CORS 放行（Access-Control-Allow-Origin:*），可直接调用，无需本地代理；
+  // 只有本地 file:// 打开时才需要本地代理或公共代理来绕开跨域。
+  const isServed = (location.protocol !== 'file:');
+  let url, reqHeaders = {'Content-Type':'application/json','Authorization':'Bearer '+apiKey};
+  if(state.api.useLocalProxy && !isServed){
+    // ② 本地 Node 代理（仅 file:// 场景需要）：浏览器只与 localhost 通信（代理回送 CORS 头），
+    //    由代理以服务端身份转发到真实接口，彻底绕开浏览器跨域。Base URL 仍填真实地址。
+    //    代理可能因端口占用自动切换到 3001/3002...，前端自动扫描发现实际端口。
+    const proxyPort = await detectLocalProxyPort();
+    if(!proxyPort){
+      throw new Error('本地代理未运行：请在「① API 设置」点「🚀 一键启动本地代理」下载脚本并双击运行，保持窗口开启后再试');
+    }
+    url = `http://127.0.0.1:${proxyPort}/chat/completions`;
+    reqHeaders['x-upstream'] = baseURL.replace(/\/$/,'');
+    log('→ 使用本地代理端口：'+proxyPort);
+  } else if(state.api.proxy && state.api.proxy.trim()){
+    // ① 公共 CORS 代理：把完整目标 URL 包进代理地址
+    const target = baseURL.replace(/\/$/,'') + '/chat/completions';
+    const p = state.api.proxy.trim();
+    url = p.includes('{url}') ? p.replace('{url}', target) : p + encodeURIComponent(target);
+  } else {
+    // 直连（https 托管环境或已配置公共代理前缀时均会走这里）
+    url = baseURL.replace(/\/$/,'') + '/chat/completions';
+  }
+  log('→ 请求 API：'+url+'（图片 '+images.length+' 张）');
+  let res, data;
+  try{
+    // 大模型解析 PDF/图片可能很慢，给前端 fetch 5 分钟超时（AbortSignal.timeout 兼容性较好）
+    const controller = new AbortController();
+    const timer = setTimeout(()=>controller.abort(), 300000);
+    try{
+      res = await fetch(url,{
+        method:'POST',
+        headers: reqHeaders,   // 必须携带 x-upstream 等自定义头
+        body:JSON.stringify(body),
+        signal: controller.signal
+      });
+    }finally{
+      clearTimeout(timer);
+    }
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('请求超时：模型处理时间过长或网络中断（已等待5分钟）');
+    throw new Error('网络/CORS 请求失败：'+e.message+'（浏览器直连可能被跨域策略拦截）');
+  }
+
+  if(!res.ok){
+    const txt = await res.text().catch(()=> '');
+    throw new Error('API 返回错误 '+res.status+'：'+txt.slice(0,300));
+  }
+  data = await res.json();
+  const raw = data?.choices?.[0]?.message?.content || '';
+  log('← 模型返回 '+raw.length+' 字符');
+  return extractJSON(raw);
+}
+
+// 组装 Prompt2：把变量替换进模板（使用教师已校对确认的评分标准）
+function buildPrompt2(rubricObj, name, cls){
+  let t = PROMPT2_TEMPLATE;
+  t = t.replace('【试卷名称】', (rubricObj.试卷基础信息&&rubricObj.试卷基础信息.试卷名称)||'');
+  t = t.replace('【七/八/九年级】', (rubricObj.试卷基础信息&&rubricObj.试卷基础信息.年级)||'');
+  t = t.replace('【学生姓名】', name||'');
+  t = t.replace('【班级】', cls||'');
+  t = t.replace('【这里程序直接填入：Prompt1输出、教师校对完成的题目评分列表JSON字符串】',
+                JSON.stringify(rubricObj.题目评分列表||[], null, 2));
+  if(!name || !cls){
+    t += '\n\n（特别说明：学生姓名或班级未填写，请从学生作业图片/PDF 中自动识别并填入输出字段“学生姓名”和“班级”；若实在无法识别则留空。）';
+  }
+  return t;
+}
+
+/* =========================================================================
+ *  客观题离线判分（前端 JS，零模型调用）
+ *  ----------------------------------------------------------------
+ *  老师录入答案文本（题号:答案 每行一个）→ 解析为 {题号:答案} 映射，
+ *  与评分标准里的“标准答案”逐题比对，答对得满分、答错得 0 分。
+ *  多解支持：标准答案或学生答案含“或/、,”分隔时，任一项相等即算对。
+ *  返回 {details:[...], errors:[...]}，结构对齐 Prompt2 单题明细。
+ * =======================================================================*/
+function parseObjAnswers(text){
+  const map={};
+  (text||'').split(/\r?\n/).forEach(line=>{
+    const m=line.match(/^\s*([0-9]+[a-zA-Z]?)\s*[\.:：)）]\s*(.+?)\s*$/);
+    if(m){ map[m[1]] = m[2]; }
+    else if(line.trim()){ // 退化容错：整行作为一个题号的答案（题号缺失则跳过）
+      const sp=line.trim().split(/\s+/);
+      if(sp.length>=2) map[sp[0]] = sp.slice(1).join(' ');
+    }
+  });
+  return map;
+}
+function normAnswer(s){
+  return String(s==null?'':s).trim().replace(/\s+/g,'').toLowerCase();
+}
+// 安全求值：仅允许数字与四则运算，禁止任何字母/函数，用于判断“3/4”与“0.75”等价
+function tryEval(s){
+  s = String(s||'').trim();
+  if(!/^[0-9+\-*/.()]+$/.test(s)) return NaN;
+  try{
+    const v = Function('"use strict";return ('+s+')')();
+    return (typeof v==='number' && isFinite(v)) ? v : NaN;
+  }catch(e){ return NaN; }
+}
+// 多解宽松比对：按“或/、,”拆分；任一对相等、数值等价、或去“x=”前缀后相等，均算对
+function answersMatch(std, stu){
+  const a=normAnswer(std).split(/或|[，,、]/).filter(Boolean);
+  const b=normAnswer(stu).split(/或|[，,、]/).filter(Boolean);
+  if(!a.length||!b.length) return false;
+  for(const x of a) for(const y of b){
+    if(x===y) return true;
+    // 去掉“x=”“y=”等前缀再比
+    const xs=x.replace(/^[a-z]\s*=\s*/,''), ys=y.replace(/^[a-z]\s*=\s*/,'');
+    if(xs===ys) return true;
+    // 数值等价：如 3/4 与 0.75、1/2 与 0.5、2 与 2.0
+    const nx=tryEval(xs), ny=tryEval(ys);
+    if(!isNaN(nx) && !isNaN(ny) && Math.abs(nx-ny) < 1e-6) return true;
+  }
+  return false;
+}
+function offlineGradeObjective(objQuestions, objText, studentName){
+  const ansMap=parseObjAnswers(objText);
+  const details=[], errors=[];
+  objQuestions.forEach(q=>{
+    const std=q.标准答案||'';
+    const stuRaw = (q.题号!=null && ansMap[q.题号]!=null) ? ansMap[q.题号] : undefined;
+    const full=parseFloat(q.本题满分)||0;
+    let score, note, stuShown, isErr=false;
+    if(stuRaw===undefined){
+      score=0;
+      stuShown='（未录入）';
+      note='【未录入】教师未录入该题答案，暂计0分，请人工复核后改分';
+      isErr=true;
+    }else if(answersMatch(std, stuRaw)){
+      score=full;
+      stuShown=stuRaw;
+      note='【离线比对】与标准答案一致，得分'+full;
+    }else{
+      score=0;
+      stuShown=stuRaw;
+      note='【离线比对】与标准答案不符，得0分（如有等价写法可手动改分）';
+      isErr=true;
+    }
+    details.push({
+      题号:q.题号, 题型:'客观题', 本题满分:String(full),
+      学生得分:String(score), 学生作答摘要:stuShown, 参考答案:std, 得分说明:note
+    });
+    if(isErr){
+      errors.push({
+        题号:q.题号,
+        错误类型:['审题失误'],
+        错误简要分析:'客观题离线比对：学生作答『'+stuShown+'』与标准答案『'+std+'』不一致',
+        薄弱知识点:''
+      });
+    }
+  });
+  return {details, errors};
+}
+
+/* =========================================================================
+ *  组装 Prompt2（仅主观题版本）—— 客观题已离线判分，此处只送主观题给模型
+ *  ----------------------------------------------------------------------
+ *  用法同 buildPrompt2，但评分标准只填“非客观题”部分，并加注说明，
+ *  让模型只关注主观题分步批改，客观题不在本次评阅范围（省 token、零客观题模型调用）。
+ * =======================================================================*/
+function buildPrompt2Sub(rubricObj, name, cls, subQuestions){
+  let t = PROMPT2_TEMPLATE;
+  t = t.replace('【试卷名称】', (rubricObj.试卷基础信息&&rubricObj.试卷基础信息.试卷名称)||'');
+  t = t.replace('【七/八/九年级】', (rubricObj.试卷基础信息&&rubricObj.试卷基础信息.年级)||'');
+  t = t.replace('【学生姓名】', name||'');
+  t = t.replace('【班级】', cls||'');
+  t = t.replace('【这里程序直接填入：Prompt1输出、教师校对完成的题目评分列表JSON字符串】',
+                JSON.stringify(subQuestions, null, 2));
+  // 追加说明：本次仅主观题，客观题已由系统离线判分
+  t += '\n\n（特别说明：本作业客观题已交由系统离线比对判分，以下仅提交主观题评分标准，'
+     + '请只针对这些主观题逐题分步批改；客观题不在本次评阅范围，无需输出。）';
+  if(!name || !cls){
+    t += '\n\n（学生姓名或班级未填写，请从学生作业图片/PDF 中自动识别并填入输出字段“学生姓名”和“班级”；若实在无法识别则留空。）';
+  }
+  return t;
+}
+
+/* =========================================================================
+ *  本地持久化（localStorage）
+ * =======================================================================*/
+function saveAll(){
+  try{
+    localStorage.setItem('mg_api', JSON.stringify(state.api));
+    localStorage.setItem('mg_rubric', JSON.stringify(state.rubric));
+    localStorage.setItem('mg_rubricConfirmed', state.rubricConfirmed?'1':'0');
+    localStorage.setItem('mg_students', JSON.stringify(state.students.map(s=>({meta:s.meta,result:s.result}))));
+  }catch(e){ log('保存本地失败：'+e.message); }
+}
+function loadAll(){
+  try{
+    const a=localStorage.getItem('mg_api'); if(a) state.api=JSON.parse(a);
+    const r=localStorage.getItem('mg_rubric'); if(r) state.rubric=JSON.parse(r);
+    state.rubricConfirmed = localStorage.getItem('mg_rubricConfirmed')==='1';
+    const s=localStorage.getItem('mg_students'); if(s) state.students=JSON.parse(s);
+  }catch(e){ log('读取本地失败：'+e.message); }
+}
+
+/* =========================================================================
+ *  标签切换
+ * =======================================================================*/
+function activateTab(name){
+  document.querySelectorAll('.tab').forEach(t=>{
+    const dis = (t.dataset.tab==='grade' && !state.rubricConfirmed);
+    t.classList.toggle('disabled', dis);
+  });
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.classList.toggle('active', t.dataset.tab===name);
+  });
+  ['api','ref','grade','report'].forEach(s=>{
+    $('sec-'+s).classList.toggle('hidden', s!==name);
+  });
+  if(name==='grade') renderTypeSummary();
+}
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    if(t.classList.contains('disabled')){
+      setStatus($('refStatus'),'请先在“② 参考答案解析”中确认启用评分标准，再进入批改。','err');
+      activateTab('ref'); return;
+    }
+    activateTab(t.dataset.tab);
+  });
+});
+
+/* =========================================================================
+ *  ① API 设置
+ * =======================================================================*/
+function fillCfgForm(){
+  $('cfgBase').value=state.api.baseURL||'';
+  $('cfgModel').value=state.api.model||'';
+  $('cfgKey').value=state.api.apiKey||'';
+  $('cfgProxy').value=state.api.proxy||'';
+  $('cfgLocalProxy').checked=!!state.api.useLocalProxy;
+  $('cfgResponseFormat').checked=state.api.responseFormat!==false;
+}
+$('btnSaveCfg').addEventListener('click', ()=>{
+  state.api={ baseURL:$('cfgBase').value.trim(), apiKey:$('cfgKey').value.trim(), model:$('cfgModel').value.trim(),
+              proxy:$('cfgProxy').value.trim(), useLocalProxy:$('cfgLocalProxy').checked,
+              responseFormat:$('cfgResponseFormat').checked };
+  saveAll();
+  setStatus($('cfgStatus'),'✅ 配置已保存','ok');
+});
+$('btnTestCfg').addEventListener('click', async ()=>{
+  state.api={ baseURL:$('cfgBase').value.trim(), apiKey:$('cfgKey').value.trim(), model:$('cfgModel').value.trim(),
+              proxy:$('cfgProxy').value.trim(), useLocalProxy:$('cfgLocalProxy').checked,
+              responseFormat:$('cfgResponseFormat').checked };
+  if(!state.api.baseURL||!state.api.apiKey||!state.api.model){ setStatus($('cfgStatus'),'请先填写完整配置','err'); return; }
+  setStatus($('cfgStatus'),'连接测试中…');
+  try{
+    const r=await callAPI('只输出JSON：{"ok":true}',[]);
+    setStatus($('cfgStatus'),'✅ 连接成功，模型返回：'+JSON.stringify(r),'ok');
+    saveAll();
+  }catch(e){ setStatus($('cfgStatus'),'❌ '+e.message,'err'); }
+});
+
+/* =========================================================================
+ *  ② 第一模块：参考答案解析（Prompt1）
+ * =======================================================================*/
+$('btnParseRef').addEventListener('click', async ()=>{
+  const files=$('refFiles').files;
+  if(!files.length){ setStatus($('refStatus'),'请先选择参考答案文件（图片/PDF）','err'); return; }
+  setStatus($('refStatus'),'正在解析参考答案，请稍候…');
+  $('refProg').classList.remove('hidden');
+  $('refProg').firstElementChild.style.width='30%';
+  try{
+    const images=await filesToImages(files);
+    $('refProg').firstElementChild.style.width='60%';
+    const obj=await callAPI(PROMPT1, images);   // ← 使用 Prompt1
+    state.rubric=obj;
+    state.rubricConfirmed=false;
+    $('refProg').firstElementChild.style.width='100%';
+    renderRubric();
+    $('rubricCard').classList.remove('hidden');
+    setStatus($('refStatus'),'✅ 解析完成，请老师核对并编辑评分标准','ok');
+    log('Prompt1 解析成功，题目数：'+(obj.题目评分列表||[]).length);
+    saveAll();
+  }catch(e){
+    setStatus($('refStatus'),'❌ '+e.message,'err');
+    log('Prompt1 失败：'+e.message);
+  }finally{
+    setTimeout(()=>$('refProg').classList.add('hidden'),600);
+  }
+});
+$('btnClearRef').addEventListener('click', ()=>{
+  $('refFiles').value=''; state.rubric=null; state.rubricConfirmed=false;
+  $('rubricCard').classList.add('hidden'); setStatus($('refStatus'),'');
+  saveAll(); updateTabsLock();
+});
+
+// 渲染可编辑评分标准
+function renderRubric(){
+  const r=state.rubric; if(!r) return;
+  const info=r.试卷基础信息||{};
+  $('rubricMeta').innerHTML = `
+    <div><b>试卷名称</b><input id="m_name" value="${esc(info.试卷名称||'')}"></div>
+    <div><b>年级</b><input id="m_grade" value="${esc(info.年级||'')}"></div>
+    <div><b>试卷满分</b><input id="m_full" value="${esc(info.试卷满分||'')}"></div>
+    <div><b>总题数</b><input id="m_total" value="${esc(info.总题数||'')}"></div>`;
+  ['m_name','m_grade','m_full','m_total'].forEach(id=>{
+    $(id).addEventListener('input',e=>{
+      const k={m_name:'试卷名称',m_grade:'年级',m_full:'试卷满分',m_total:'总题数'}[id];
+      r.试卷基础信息[k]=e.target.value; saveAll();
+    });
+  });
+
+  const list=r.题目评分列表||(r.题目评分列表=[]);
+  const wrap=$('rubricList'); wrap.innerHTML='';
+  list.forEach((q,qi)=> wrap.appendChild(renderQuestion(q,qi)));
+}
+function renderQuestion(q,qi){
+  const div=document.createElement('div');
+  div.className='qblock';
+  div.innerHTML=`
+    <div class="row">
+      <div><label>题号</label><input data-k="题号" value="${esc(q.题号||'')}"></div>
+      <div><label>题型</label>
+        <select data-k="题型">
+          ${['客观题','计算题','解方程','几何证明','应用题','化简求值'].map(t=>
+            `<option ${q.题型===t?'selected':''}>${t}</option>`).join('')}
+        </select></div>
+      <div><label>本题满分</label><input data-k="本题满分" value="${esc(q.本题满分||'')}"></div>
+      <div><label>标准答案</label><input data-k="标准答案" value="${esc(q.标准答案||'')}"></div>
+    </div>
+    <label>分步评分细则</label>
+    <div class="steps"></div>
+    <div class="btn-row">
+      <button class="btn-ghost btn-sm act-addstep">＋ 增加步骤</button>
+      <button class="btn-danger btn-sm act-delq">删除本题</button>
+    </div>`;
+  div.querySelectorAll('[data-k]').forEach(inp=>{
+    inp.addEventListener('input',e=>{ q[e.target.dataset.k]=e.target.value; saveAll(); });
+  });
+  const steps=div.querySelector('.steps');
+  (q.分步评分细则||(q.分步评分细则=[])).forEach((s,si)=> steps.appendChild(renderStep(s,si,steps,q)));
+  div.querySelector('.act-addstep').addEventListener('click',()=>{
+    q.分步评分细则.push({步骤描述:'',本步骤分值:''});
+    steps.appendChild(renderStep(q.分步评分细则[q.分步评分细则.length-1], q.分步评分细则.length-1, steps, q));
+    saveAll();
+  });
+  div.querySelector('.act-delq').addEventListener('click',()=>{
+    state.rubric.题目评分列表.splice(qi,1); renderRubric(); saveAll();
+  });
+  return div;
+}
+function renderStep(s,si,steps,q){
+  const row=document.createElement('div');
+  row.className='steprow';
+  row.innerHTML=`<input placeholder="步骤描述" value="${esc(s.步骤描述||'')}">
+                 <input style="max-width:110px" placeholder="分值" value="${esc(s.本步骤分值||'')}">
+                 <button class="btn-danger btn-sm act-delstep">✕</button>`;
+  const ins=row.querySelectorAll('input');
+  ins[0].addEventListener('input',e=>{s.步骤描述=e.target.value;saveAll();});
+  ins[1].addEventListener('input',e=>{s.本步骤分值=e.target.value;saveAll();});
+  row.querySelector('.act-delstep').addEventListener('click',()=>{
+    q.分步评分细则.splice(si,1); renderRubric(); saveAll();
+  });
+  return row;
+}
+$('btnAddQ').addEventListener('click',()=>{
+  if(!state.rubric) state.rubric={试卷基础信息:{},题目评分列表:[]};
+  state.rubric.题目评分列表.push({题号:'',题型:'客观题',本题满分:'',标准答案:'',分步评分细则:[]});
+  renderRubric(); saveAll();
+});
+$('btnConfirmRubric').addEventListener('click',()=>{
+  if(!state.rubric||!(state.rubric.题目评分列表||[]).length){ setStatus($('rubricConfirmStatus'),'评分标准为空，无法确认','err'); return; }
+  state.rubricConfirmed=true;
+  saveAll(); updateTabsLock();
+  renderTypeSummary();   // 同步更新批改页顶部的客观/主观题号分布
+  setStatus($('rubricConfirmStatus'),'✅ 已确认启用，可进入“③ 学生作业批改”','ok');
+  $('rubricLockedHint').textContent='🔒 评分标准已锁定启用。如需修改，请到本节“清空重传”后重新解析。';
+});
+$('btnExportRubric').addEventListener('click',()=>download('评分标准.json', JSON.stringify(state.rubric,null,2)));
+
+/* =========================================================================
+ *  ③ 第二模块：学生作业批改（Prompt2）
+ * =======================================================================*/
+function updateTabsLock(){
+  const gradeTab=$('tabGrade'), repTab=$('tabReport');
+  gradeTab.classList.toggle('disabled', !state.rubricConfirmed);
+  if(!state.rubricConfirmed){ repTab.classList.add('disabled'); }
+  else repTab.classList.remove('disabled');
+}
+
+// 在学生作业批改页顶部显示当前评分标准里客观题/主观题各自的题号分布
+function renderTypeSummary(){
+  const el=$('typeSummary');
+  if(!state.rubricConfirmed || !state.rubric){ el.innerHTML=''; return; }
+  const list=state.rubric.题目评分列表||[];
+  const obj=[], sub={};
+  list.forEach(q=>{
+    const t=String(q.题型||'');
+    const no=String(q.题号||'');
+    if(!no) return;
+    if(isObjectiveType(t)) obj.push(no);
+    else {
+      const label=t||'主观题';
+      if(!sub[label]) sub[label]=[];
+      sub[label].push(no);
+    }
+  });
+  let html='';
+  if(obj.length) html+=`<span><b>客观题（${obj.length}道）</b>：${obj.join('、')}</span>`;
+  Object.entries(sub).forEach(([label,nos])=>{
+    html+=`<span><b>${label}（${nos.length}道）</b>：${nos.join('、')}</span>`;
+  });
+  el.innerHTML=html || '<span>当前评分标准暂无题型分类信息</span>';
+}
+
+// 批改模式切换：完整 / 仅客观 / 仅主观 —— 联动灰显不需要的区域并更新提示
+function getGradeMode(){ return document.querySelector('input[name="gradeMode"]:checked').value; }
+function applyModeUI(){
+  const mode=getGradeMode();
+  const objCard=$('objCard'), subCard=$('subCard'), fullCard=$('fullCard'), hint=$('modeHint');
+  if(mode==='full'){
+    objCard.classList.add('hidden');
+    subCard.classList.add('hidden');
+    fullCard.classList.remove('hidden');
+    hint.textContent='“完整试卷”：上传完整作业文件并录入客观题答案，主观题由大模型分步批改，客观题由系统离线判分，二者合并为总分与学情。';
+  }else if(mode==='obj'){
+    objCard.classList.remove('hidden');
+    subCard.classList.add('hidden');
+    fullCard.classList.add('hidden');
+    hint.textContent='“仅批客观题”：只做离线比对判分，不调大模型、秒出结果。';
+  }else{
+    objCard.classList.add('hidden');
+    subCard.classList.remove('hidden');
+    fullCard.classList.add('hidden');
+    hint.textContent='“仅批主观题”：只把主观题交给大模型分步批改，客观题不参与本次评阅。';
+  }
+}
+document.querySelectorAll('input[name="gradeMode"]').forEach(r=>{
+  r.addEventListener('change', applyModeUI);
+});
+
+$('btnAddStu').addEventListener('click',()=>{
+  const name=$('stuName').value.trim(), cls=$('stuClass').value.trim();
+  const mode=getGradeMode();   // full / obj / sub
+  let files=[], objFiles=[], objText='';
+  if(mode==='full'){
+    files=Array.from($('fullFiles').files);
+    objText=$('fullObj').value.trim();
+  }else if(mode==='obj'){
+    objFiles=Array.from($('stuObjFiles').files);
+    objText=$('stuObj').value.trim();
+  }else{
+    files=Array.from($('stuFiles').files);
+  }
+  // 按模式校验必填项（姓名班级选填，未填时由模型从作业中识别）
+  if(mode==='obj' && !objText){ setStatus($('gradeStatus'),'“仅批客观题”模式请先录入客观题答案','err'); return; }
+  if(mode==='sub' && !files.length){ setStatus($('gradeStatus'),'“仅批主观题”模式请先选择作业图片/PDF','err'); return; }
+  if(mode==='full' && !files.length && !objText){ setStatus($('gradeStatus'),'“完整试卷”模式请先上传作业文件或录入客观题答案','err'); return; }
+  state.queue.push({name,cls,files,objFiles,objAnswers:objText,mode});
+  $('stuName').value=''; $('stuClass').value='';
+  $('stuFiles').value=''; $('stuObjFiles').value=''; $('stuObj').value='';
+  $('fullFiles').value=''; $('fullObj').value='';
+  $('queueCount').textContent='队列：'+state.queue.length+' 人';
+  const displayName=name||'（未命名）';
+  const modeLabel={full:'完整试卷',obj:'仅客观题',sub:'仅主观题'}[mode];
+  setStatus($('gradeStatus'),`已加入队列：${displayName}（${modeLabel}）`,'ok');
+});
+$('btnClearQueue').addEventListener('click',()=>{
+  state.queue=[]; $('queueCount').textContent='队列：0 人'; setStatus($('gradeStatus'),'队列已清空');
+});
+// 📋 从已确认的参考答案自动生成客观题答案模板（智能补全，不覆盖已填题号）
+function autoFillObjectiveAnswers(textareaId){
+  if(!state.rubricConfirmed){ setStatus($('gradeStatus'),'请先在“② 参考答案解析”确认启用评分标准','err'); return; }
+  const allQ = state.rubric.题目评分列表 || [];
+  // 识别客观题：题型含“客观”或“选择”“填空”
+  const objQ = allQ.filter(q=> /客观|选择|填空/.test(q.题型||''));
+  if(!objQ.length){ setStatus($('gradeStatus'),'当前评分标准里没有客观题','err'); return; }
+  // 解析现有录入，拿到已填题号集合（避免覆盖老师手动填的内容）
+  const existing = parseObjAnswers($(textareaId).value);
+  const lines = $(textareaId).value.trim() ? $(textareaId).value.trim().split(/\r?\n/) : [];
+  let added=0, emptyStd=[];
+  for(const q of objQ){
+    const no=(q.题号||'').trim();
+    if(!no) continue;
+    if(existing[no] !== undefined) continue;   // 已填，跳过
+    const std=(q.标准答案||'').trim();
+    if(!std){ emptyStd.push(no); continue; }    // 标准答案为空，留给老师补
+    lines.push(no+':'+std);
+    added++;
+  }
+  $(textareaId).value = lines.join('\n');
+  let msg=`✅ 已自动填入 ${added} 道客观题标准答案`;
+  if(emptyStd.length) msg+=`；以下题标准答案缺失，需老师补全：${emptyStd.join('、')}`;
+  setStatus($('gradeStatus'), msg, emptyStd.length?'err':'ok');
+}
+$('btnAutoObj').addEventListener('click',()=>autoFillObjectiveAnswers('stuObj'));
+$('btnFullAutoObj').addEventListener('click',()=>autoFillObjectiveAnswers('fullObj'));
+$('btnBatchGrade').addEventListener('click', async ()=>{
+  if(!state.rubricConfirmed){ setStatus($('gradeStatus'),'请先确认启用评分标准','err'); return; }
+  if(!state.queue.length){ setStatus($('gradeStatus'),'队列为空，请先加入学生作业','err'); return; }
+  $('gradeProg').classList.remove('hidden');
+  const total=state.queue.length;
+  for(let i=0;i<total;i++){
+    const item=state.queue[i];
+    $('gradeProg').firstElementChild.style.width=((i/total)*100)+'%';
+    setStatus($('gradeStatus'),`正在批改 (${i+1}/${total})：${item.name} …`);
+    log('批改开始：'+item.name);
+    try{
+      const result=await gradeOne(item);   // ← 客观题离线 + 主观题调 Prompt2（内部拆分）
+      state.students.push({meta:{name:item.name,cls:item.cls}, result});
+      log('✅ 完成：'+item.name+' 得分 '+(result.实际得分||'?'));
+    }catch(e){
+      log('❌ '+item.name+' 失败：'+e.message);
+      state.students.push({meta:{name:item.name,cls:item.cls},
+        result:{学生姓名:item.name,班级:item.cls,实际得分:'—',错误:'批改失败：'+e.message,
+                每道题批改明细:[],错题列表:[],个人作业统计:{},个人学情建议:''}});
+    }
+  }
+  $('gradeProg').firstElementChild.style.width='100%';
+  state.queue=[]; $('queueCount').textContent='队列：0 人';
+  setStatus($('gradeStatus'),`✅ 全部批改完成，共 ${state.students.length} 人`,'ok');
+  saveAll();
+  renderStudents();
+  setTimeout(()=>$('gradeProg').classList.add('hidden'),600);
+});
+
+/* -------------------------------------------------------------------------
+ * 单份作业批改：客观题离线判分（不调模型）+ 主观题调用 Prompt2（调模型）
+ * 返回与 Prompt2 输出结构一致的 result 对象，供渲染/汇总复用。
+ * -----------------------------------------------------------------------*/
+async function gradeOne(item){
+  const rubric = state.rubric || {试卷基础信息:{},题目评分列表:[]};
+  const allQ = rubric.题目评分列表 || [];
+  const mode = item.mode || 'full';   // full / obj / sub
+  // 按题型 + 模式筛选本次要评阅的题目
+  let objQ = allQ.filter(q=> isObjectiveType(q.题型));
+  let subQ = allQ.filter(q=> !isObjectiveType(q.题型));
+  if(mode==='obj'){ subQ = []; }       // 仅批客观题：主观题不参与
+  if(mode==='sub'){ objQ = []; }       // 仅批主观题：客观题不参与
+
+  // ① 客观题：前端离线比对（零模型调用）
+  const obj = offlineGradeObjective(objQ, item.objAnswers, item.name);
+
+  // ② 主观题：仍调用大模型（仅传主观题评分标准，省 token）
+  // 完整试卷模式下，把客观题作业文件也一并传给模型作为参考
+  let subDetails=[], subErrors=[], subAdvice='';
+  if(subQ.length){
+    const allImages = await filesToImages((item.files||[]).concat(item.objFiles||[]));
+    const prompt = buildPrompt2Sub(rubric, item.name, item.cls, subQ); // ← 使用 Prompt2（仅主观题）
+    const sub = await callAPI(prompt, allImages);
+    subDetails = sub.每道题批改明细 || [];
+    subErrors  = sub.错题列表 || [];
+    subAdvice  = sub.个人学情建议 || '';
+  }
+
+  // ③ 合并：明细 + 错题，重算总分/正确率（满分只计本次评阅的题目）
+  const gradedQ = objQ.concat(subQ);
+  const details = obj.details.concat(subDetails);
+  const errors  = obj.errors.concat(subErrors);
+  const fullScore = gradedQ.reduce((s,q)=> s + (parseFloat(q.本题满分)||0), 0);
+  const modeLabel = {full:'完整试卷',obj:'仅客观题',sub:'仅主观题'}[mode];
+  const result = {
+    学生姓名: item.name,
+    班级: item.cls,
+    实际得分: '',
+    试卷满分: String(fullScore),
+    每道题批改明细: details,
+    错题列表: errors,
+    个人作业统计: {},
+    个人学情建议: subAdvice || (subQ.length? '' : '本次为客观题离线判分；建议结合课堂表现综合评估。')
+  };
+  if(mode!=='full') result.批改模式 = modeLabel;   // 在结果里标注评阅范围
+  recomputeStudent(result);
+
+  // 若用户未填姓名/班级，尝试用模型返回回填
+  if(!item.name && result.学生姓名){ item.name = result.学生姓名; }
+  if(!item.cls && result.班级){ item.cls = result.班级; }
+
+  return result;
+}
+$('btnClearStudents').addEventListener('click',()=>{
+  if(!confirm('确定清空所有已批改结果？')) return;
+  state.students=[]; renderStudents(); saveAll();
+});
+
+// 渲染全班总览 + 每位学生详情（含识别存疑手动改分）
+function renderStudents(){
+  const ov=$('studentsOverview');
+  if(!state.students.length){ ov.innerHTML='<div class="hint">暂无批改结果。请在上方加入学生并批量批改。</div>'; }
+  else{
+    let rows=state.students.map(s=>{
+      const r=s.result||{};
+      return `<tr>
+        <td>${esc(s.meta.name)}</td><td>${esc(s.meta.cls)}</td>
+        <td><b>${esc(r.实际得分??'—')}</b></td>
+        <td>${esc(r.试卷满分??'—')}</td>
+        <td>${esc(r.个人作业统计?.正确率??'—')}</td>
+        <td>${esc(r.个人作业统计?.做错题目数??'—')}</td>
+        <td>${esc((r.错题列表||[]).length)}</td>
+      </tr>`;
+    }).join('');
+    ov.innerHTML=`<table>
+      <thead><tr><th>姓名</th><th>班级</th><th>实际得分</th><th>试卷满分</th><th>正确率</th><th>错题数</th><th>错题条数</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+  }
+
+  const det=$('studentsDetail'); det.innerHTML='';
+  state.students.forEach((s,idx)=> det.appendChild(renderStudentCard(s,idx)));
+}
+
+// 判断某题是否被标“识别存疑/无法识别/待复核”等
+function isDoubt(q){
+  const t=(q.得分说明||'')+(q.学生作答摘要||'');
+  return /识别存疑|教师复核|无法识别|识别不足|作答无法识别|未录入|待复核/.test(t);
+}
+
+function renderStudentCard(s,idx){
+  const r=s.result||{};
+  const acc=document.createElement('div');
+  acc.className='accordion';
+  const stats=r.个人作业统计||{};
+  const modeTag = r.批改模式 ? `　🏷️ ${esc(r.批改模式)}` : '';
+  const displayName = s.meta.name || '（未命名）';
+  acc.innerHTML=`
+    <div class="acc-head">
+      <span>👤 ${esc(displayName)}（${esc(s.meta.cls||'—')}）　得分 ${esc(r.实际得分??'—')} / ${esc(r.试卷满分??'—')}　正确率 ${esc(stats.正确率??'—')}${modeTag}</span>
+      <span>展开 ▾</span>
+    </div>
+    <div class="acc-body"></div>`;
+  const body=acc.querySelector('.acc-body');
+  acc.querySelector('.acc-head').addEventListener('click',()=>acc.classList.toggle('open'));
+
+  // 逐题明细
+  const details=(r.每道题批改明细||[]);
+  if(details.length){
+    let rows=details.map((q,qi)=>{
+      const doubt=isDoubt(q);
+      return `<tr class="${doubt?'':''}">
+        <td>${esc(q.题号)}</td>
+        <td>${esc(q.题型)}</td>
+        <td>${esc(q.本题满分)}</td>
+        <td style="max-width:110px">
+          <input class="scoreInput" data-idx="${idx}" data-qi="${qi}" value="${esc(q.学生得分??'0')}" style="padding:4px 6px">
+          ${doubt?'<span class="doubt-flag">⚠ 识别存疑</span>':''}
+        </td>
+        <td>${esc(q.学生作答摘要||'—')}</td>
+        <td>${esc(q.参考答案||'—')}</td>
+        <td>${esc(q.得分说明||'—')}</td>
+      </tr>`;
+    }).join('');
+    body.insertAdjacentHTML('beforeend',
+      `<h3 style="margin:4px 0 6px">逐题批改明细（可手动改分，⚠为识别存疑题）</h3>
+       <table><thead><tr><th>题号</th><th>题型</th><th>满分</th><th>学生得分(可改)</th><th>作答摘要</th><th>参考答案</th><th>得分说明</th></tr></thead><tbody>${rows}</tbody></table>`);
+    body.querySelectorAll('.scoreInput').forEach(inp=>{
+      inp.addEventListener('input',e=>{
+        const i=+e.target.dataset.idx, j=+e.target.dataset.qi;
+        const v=e.target.value.trim();
+        state.students[i].result.每道题批改明细[j].学生得分=v;
+        recomputeStudent(state.students[i].result);
+        saveAll();
+        // 更新总览与表头分数
+        const r2=state.students[i].result;
+        const displayName2 = state.students[i].meta.name || '（未命名）';
+        acc.querySelector('.acc-head span').innerHTML=`👤 ${esc(displayName2)}（${esc(state.students[i].meta.cls||'—')}）　得分 ${esc(r2.实际得分??'—')} / ${esc(r2.试卷满分??'—')}　正确率 ${esc((r2.个人作业统计||{}).正确率??'—')}`;
+        renderStudentsOverviewOnly();
+      });
+    });
+  }
+
+  // 错题列表
+  const wrong=(r.错题列表||[]);
+  if(wrong.length){
+    let wr=wrong.map(w=>`<tr><td>${esc(w.题号)}</td>
+      <td>${(w.错误类型||[]).map(t=>`<span class="badge badge-bad">${esc(t)}</span>`).join(' ')}</td>
+      <td>${esc(w.错误简要分析||'—')}</td><td>${esc(w.薄弱知识点||'—')}</td></tr>`).join('');
+    body.insertAdjacentHTML('beforeend',
+      `<h3 style="margin:12px 0 6px">错题列表</h3>
+       <table><thead><tr><th>题号</th><th>错误类型</th><th>简要分析</th><th>薄弱知识点</th></tr></thead><tbody>${wr}</tbody></table>`);
+  }
+
+  // 个人统计 + 建议
+  body.insertAdjacentHTML('beforeend',
+    `<div class="kv" style="margin-top:12px">
+       <div><b>总题数</b><span>${esc(stats.总题数??'—')}</span></div>
+       <div><b>做对</b><span>${esc(stats.做对题数??'—')}</span></div>
+       <div><b>做错</b><span>${esc(stats.做错题目数??'—')}</span></div>
+       <div><b>正确率</b><span>${esc(stats.正确率??'—')}</span></div>
+       <div><b>错误率</b><span>${esc(stats.错误率??'—')}</span></div>
+     </div>
+     <div class="hint"><b>个人学情建议：</b>${esc(r.个人学情建议||'—')}</div>`);
+
+  return acc;
+}
+
+// 手动改分后重算该题学生实际得分 / 统计
+function recomputeStudent(r){
+  const details=r.每道题批改明细||[];
+  let total=0, correct=0, totalQ=details.length;
+  details.forEach(q=>{
+    const s=parseFloat(q.学生得分); const full=parseFloat(q.本题满分);
+    if(!isNaN(s)) total+=s;
+    if(!isNaN(s)&&!isNaN(full)&&Math.abs(s-full)<1e-6) correct++;
+  });
+  r.实际得分=total.toFixed(1);
+  if(!r.个人作业统计) r.个人作业统计={};
+  r.个人作业统计.总题数=totalQ;
+  r.个人作业统计.做对题数=correct;
+  r.个人作业统计.做错题目数=totalQ-correct;
+  r.个人作业统计.正确率= totalQ? (correct/totalQ*100).toFixed(1)+'%':'0%';
+  r.个人作业统计.错误率= totalQ? ((totalQ-correct)/totalQ*100).toFixed(1)+'%':'0%';
+}
+function renderStudentsOverviewOnly(){
+  const ov=$('studentsOverview');
+  if(!state.students.length){ ov.innerHTML='<div class="hint">暂无批改结果。</div>'; return; }
+  let rows=state.students.map(s=>{
+    const r=s.result||{};
+    return `<tr>
+      <td>${esc(s.meta.name)}</td><td>${esc(s.meta.cls)}</td>
+      <td><b>${esc(r.实际得分??'—')}</b></td>
+      <td>${esc(r.试卷满分??'—')}</td>
+      <td>${esc(r.个人作业统计?.正确率??'—')}</td>
+      <td>${esc(r.个人作业统计?.做错题目数??'—')}</td>
+      <td>${esc((r.错题列表||[]).length)}</td>
+    </tr>`;
+  }).join('');
+  ov.innerHTML=`<table>
+    <thead><tr><th>姓名</th><th>班级</th><th>实际得分</th><th>试卷满分</th><th>正确率</th><th>错题数</th><th>错题条数</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+$('btnExportStudents').addEventListener('click',exportStudentsXLSX);
+
+/* =========================================================================
+ *  ④ 第三模块：班级学情汇总（Prompt3）
+ * =======================================================================*/
+$('btnGenReport').addEventListener('click', async ()=>{
+  if(!state.students.length){ setStatus($('reportStatus'),'请先完成至少一名学生的批改','err'); return; }
+  setStatus($('reportStatus'),'正在生成班级学情报告…');
+  try{
+    // 仅送入每位学生的 Prompt2 批改结果对象（不含前端 meta）
+    const arr=state.students.map(s=>s.result);
+    const prompt=PROMPT3_TEMPLATE + '\n\n以下为全班学生作业批改结果JSON数组：\n' + JSON.stringify(arr,null,2); // ← 使用 Prompt3
+    const report=await callAPI(prompt,[]);
+    renderReport(report);
+    state.lastReport=report; saveAll();
+    setStatus($('reportStatus'),'✅ 班级学情报告已生成','ok');
+    log('Prompt3 班级报告生成成功');
+  }catch(e){
+    setStatus($('reportStatus'),'❌ '+e.message,'err');
+    log('Prompt3 失败：'+e.message);
+  }
+});
+$('btnExportReport').addEventListener('click',()=>{
+  if(state.lastReport) download('班级学情报告.json', JSON.stringify(state.lastReport,null,2));
+  else setStatus($('reportStatus'),'尚未生成报告','err');
+});
+
+/* -------------------------------------------------------------------------
+ * 班级学情报告可视化：基于 state.students 真实批改数据，零依赖 SVG/Canvas，
+ * 用 CSS conic-gradient 做饼图、DIV 做横向条形图。
+ * -----------------------------------------------------------------------*/
+function parsePercent(s){ if(s==null) return null; const m=String(s).match(/([0-9]+(?:\.[0-9]+)?)/); return m? parseFloat(m[1]) : null; }
+function computeClassCharts(){
+  const students = state.students || [];
+  let sum=0, cnt=0;
+  const errCount={};
+  for(const s of students){
+    const r=s.result||{};
+    const stat=r.个人作业统计||{};
+    const p=parsePercent(stat.正确率);
+    if(p!=null){ sum+=p; cnt++; }
+    (r.错题列表||[]).forEach(e=>{ const no=e.题号||'?'; errCount[no]=(errCount[no]||0)+1; });
+  }
+  const avg = cnt? sum/cnt : null;
+  const bar = Object.entries(errCount).map(([no,n])=>({no,n})).sort((a,b)=>b.n-a.n).slice(0,12);
+  return {avg, bar, total:students.length, cnt};
+}
+function pieHTML(avg){
+  const pct = avg==null?0:Math.max(0,Math.min(100,avg));
+  const right='#16a34a', wrong='#dc2626';
+  return `<div class="chart-pie-wrap">
+    <div class="chart-pie" style="background:conic-gradient(${right} 0% ${pct}%, ${wrong} ${pct}% 100%)">
+      <div class="chart-pie-center"><b>${pct.toFixed(1)}%</b><span>正确率</span></div>
+    </div>
+    <div class="chart-legend">
+      <div><i style="background:${right}"></i>正确 ${pct.toFixed(1)}%</div>
+      <div><i style="background:${wrong}"></i>错误 ${(100-pct).toFixed(1)}%</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">基于 ${state.students.length} 名学生</div>
+    </div>
+  </div>`;
+}
+function barHTML(bar){
+  if(!bar.length) return '<div class="hint">暂无错题数据</div>';
+  const max=Math.max(...bar.map(b=>b.n),1);
+  return `<div class="chart-bar">`+bar.map(b=>`
+    <div class="bar-row" data-no="${esc(b.no)}" onclick="showQuestionDetail('${esc(b.no)}')">
+      <div class="bar-label">${esc(b.no)}题</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max((b.n/max*100).toFixed(1),7)}%">${b.n}人</div></div>
+    </div>`).join('')+`</div>`;
+}
+
+// 通用环形图（指定百分比与中心标题）
+function donutHTML(pct, title){
+  pct = pct==null?0:Math.max(0,Math.min(100,pct));
+  const right='#16a34a', wrong='#dc2626';
+  return `<div class="chart-pie" style="background:conic-gradient(${right} 0% ${pct}%, ${wrong} ${pct}% 100%)">
+    <div class="chart-pie-center"><b>${pct.toFixed(1)}%</b><span>${esc(title)}</span></div>
+  </div>`;
+}
+
+// 解析数值（题分/得分可能是字符串）
+function numVal(s){ const m=String(s??'').match(/-?\d+(?:\.\d+)?/); return m? parseFloat(m[1]) : 0; }
+// 判断某题是否为客观题
+function isObjectiveType(t){ return /客观|选择|填空/.test(String(t||'')); }
+
+// 计算客观题 / 主观题 分项得分率 与 各题型得分率
+function computeObjSub(){
+  let objMax=0, objGot=0, subMax=0, subGot=0;
+  const byType={};
+  for(const s of state.students){
+    (s.result?.每道题批改明细||[]).forEach(d=>{
+      const t=String(d.题型||'');
+      const max=numVal(d.本题满分), got=numVal(d.学生得分);
+      if(isObjectiveType(t)){ objMax+=max; objGot+=got; }
+      else { subMax+=max; subGot+=got; }
+      const label=t||'未分类';
+      if(!byType[label]) byType[label]={max:0,got:0};
+      byType[label].max+=max; byType[label].got+=got;
+    });
+  }
+  const rate=(got,max)=> max>0 ? Math.round(got/max*1000)/10 : null;
+  const typeRows=Object.entries(byType)
+    .map(([type,v])=>({type, rate:rate(v.got,v.max), max:v.max}))
+    .sort((a,b)=> (a.rate==null?999:100-a.rate) - (b.rate==null?999:100-b.rate)); // 得分率低的排前面
+  return {
+    objRate:rate(objGot,objMax), subRate:rate(subGot,subMax),
+    objGot, objMax, subGot, subMax, typeRows
+  };
+}
+
+// 各题型得分率横向条形图
+function typeBarHTML(rows){
+  if(!rows.length) return '<div class="hint">暂无分项数据</div>';
+  return `<div class="chart-bar">`+rows.map(r=>`
+    <div class="bar-row">
+      <div class="bar-label">${esc(r.type)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(r.rate==null?4:r.rate,5)}%;${r.rate!=null&&r.rate<60?'background:#dc2626':''}">${r.rate==null?'—':r.rate+'%'}</div></div>
+    </div>`).join('')+`</div>`;
+}
+
+/* -------------------------------------------------------------------------
+ * 点击高频错题条形图 → 弹出该题详情（含评分标准、做错学生名单）
+ * -------------------------------------------------------------------------*/
+function closeQuestionModal(){
+  const old=document.getElementById('qDetailModal');
+  if(old) old.remove();
+}
+function showQuestionDetail(no){
+  closeQuestionModal();
+  const rubric = state.rubric || {题目评分列表:[]};
+  const qItem = (rubric.题目评分列表||[]).find(q=> String(q.题号||'').trim() === String(no).trim());
+
+  // 收集做错该题的学生（从真实批改明细：学生得分 < 本题满分 即算做错）
+  const wrongStudents=[];
+  for(const s of state.students||[]){
+    const r=s.result||{};
+    const detail=(r.每道题批改明细||[]).find(d=> String(d.题号||'').trim() === String(no).trim());
+    if(!detail) continue;
+    const full=parseFloat(detail.本题满分)||0;
+    const got=parseFloat(detail.学生得分);
+    const isWrong=isNaN(got) || got < full;
+    // 同时参考错题列表，只要有一处标记错误即纳入
+    const inErrList=(r.错题列表||[]).some(e=> String(e.题号||'').trim() === String(no).trim());
+    if(isWrong || inErrList){
+      wrongStudents.push({
+        name:s.meta.name, cls:s.meta.cls,
+        got:isNaN(got)?'—':got, full,
+        summary:detail.学生作答摘要||'—',
+        reason:detail.得分说明||'—',
+        errorTypes:(r.错题列表||[]).find(e=> String(e.题号||'').trim()===String(no).trim())?.错误类型||[]
+      });
+    }
+  }
+
+  // 题目信息区
+  let infoHTML='';
+  if(qItem){
+    const steps=(qItem.分步评分细则||[]).map((st,i)=>`
+      <tr><td>${i+1}</td><td>${esc(st.步骤描述||'—')}</td><td>${esc(st.本步骤分值||'—')}</td></tr>`).join('');
+    infoHTML=`<div class="detail-grid">
+      <div><b>题号</b><span>${esc(qItem.题号)}</span></div>
+      <div><b>题型</b><span>${esc(qItem.题型||'—')}</span></div>
+      <div><b>本题满分</b><span>${esc(qItem.本题满分||'—')}</span></div>
+      <div><b>做错人数</b><span>${wrongStudents.length} 人</span></div>
+    </div>
+    <div style="background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+      <b style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">标准答案</b>
+      <div style="font-size:14px;">${esc(qItem.标准答案||'（参考答案中未提供）')}</div>
+    </div>
+    ${steps? `<h4>分步评分细则</h4>
+      <table><thead><tr><th style="width:40px">步骤</th><th>步骤描述</th><th style="width:80px">分值</th></tr></thead><tbody>${steps}</tbody></table>`
+      : '<div class="hint">该题无分步评分细则</div>'}`;
+  }else{
+    infoHTML=`<div class="detail-grid">
+      <div><b>题号</b><span>${esc(no)}</span></div>
+      <div><b>做错人数</b><span>${wrongStudents.length} 人</span></div>
+    </div>
+    <div class="hint">评分标准中未找到该题详细信息（可能题号识别不一致）。</div>`;
+  }
+
+  // 做错学生名单
+  let listHTML='';
+  if(wrongStudents.length){
+    const rows=wrongStudents.map(st=>`
+      <tr>
+        <td>${esc(st.name)}</td>
+        <td>${esc(st.cls||'—')}</td>
+        <td><b style="color:#dc2626">${esc(String(st.got))}</b> / ${esc(String(st.full))}</td>
+        <td>${esc(st.summary)}</td>
+        <td>${(st.errorTypes||[]).map(t=>`<span class="badge badge-bad">${esc(t)}</span>`).join(' ')||'—'}</td>
+        <td>${esc(st.reason)}</td>
+      </tr>`).join('');
+    listHTML=`<h4>做错学生名单（${wrongStudents.length} 人）</h4>
+      <table><thead><tr><th>姓名</th><th>班级</th><th>得分</th><th>作答摘要</th><th>错误类型</th><th>得分说明</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }else{
+    listHTML=`<div class="wrong-list-empty">未收集到该题的学生作答明细</div>`;
+  }
+
+  const div=document.createElement('div');
+  div.id='qDetailModal';
+  div.className='modal-overlay';
+  div.innerHTML=`<div class="modal-panel">
+    <div class="modal-header">
+      <h3>🔍 第 ${esc(no)} 题错题详情</h3>
+      <button class="modal-close" onclick="closeQuestionModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      ${infoHTML}
+      ${listHTML}
+    </div>
+  </div>`;
+  div.addEventListener('click',e=>{ if(e.target===div) closeQuestionModal(); });
+  document.body.appendChild(div);
+}
+
+function renderReport(rep){
+  const panel=$('reportPanel'); if(!rep){panel.innerHTML='';return;}
+  const charts = computeClassCharts();
+  let html=`<div class="card">
+    <h2>📈 班级学情报告</h2>
+    <div class="kv">
+      <div><b>班级整体正确率</b><span>${esc(rep.班级整体正确率??'—')}</span></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-box">
+        <h4>班级整体正确率分布（扇形图）</h4>
+        ${pieHTML(charts.avg)}
+      </div>
+      <div class="chart-box">
+        <h4>高频错题错误人数排行（条形图）</h4>
+        ${barHTML(charts.bar)}
+      </div>
+    </div>`;
+
+  // 客观题 / 主观题 分项评阅
+  const os = computeObjSub();
+  if(os.objMax>0 || os.subMax>0){
+    const fmtRate = r => r==null ? '—' : r.toFixed(1)+'%';
+    const r2 = v => Math.round(v*10)/10;
+    html += `<h3>📊 客观题 / 主观题 分项评阅</h3>
+      <div class="chart-row">
+        <div class="chart-box">
+          <h4>客观题得分率（扇形图）</h4>
+          <div class="chart-pie-wrap">
+            ${donutHTML(os.objRate,'客观题')}
+            <div class="chart-legend">
+              <div><i style="background:#16a34a"></i>得分率 ${fmtRate(os.objRate)}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">总得分 ${r2(os.objGot)} / ${r2(os.objMax)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-box">
+          <h4>主观题得分率（扇形图）</h4>
+          <div class="chart-pie-wrap">
+            ${donutHTML(os.subRate,'主观题')}
+            <div class="chart-legend">
+              <div><i style="background:#16a34a"></i>得分率 ${fmtRate(os.subRate)}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">总得分 ${r2(os.subGot)} / ${r2(os.subMax)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <h4 style="margin:10px 0 8px">各题型得分率对比（得分率越低越靠前）</h4>
+      ${typeBarHTML(os.typeRows)}`;
+  }
+
+  // 高频必讲题目
+  if((rep.高频必讲题目||[]).length){
+    html+=`<h3>🔥 课堂必讲高频错题</h3><table>
+      <thead><tr><th>题号</th><th>错误人数占比</th><th>学生普遍问题</th><th>课堂讲解重点</th></tr></thead><tbody>`+
+      rep.高频必讲题目.map(q=>`<tr><td>${esc(q.题号)}</td><td>${miniPie(q.错误人数占比)}</td>
+        <td>${esc(q.学生普遍问题||'—')}</td><td>${esc(q.课堂讲解重点||'—')}</td></tr>`).join('')+`</tbody></table>`;
+  }
+
+  // 表扬名单
+  if((rep.表扬名单||[]).length){
+    html+=`<h3>🌟 表扬名单</h3><table>
+      <thead><tr><th>学生姓名</th><th>表扬理由</th></tr></thead><tbody>`+
+      rep.表扬名单.map(p=>`<tr><td>${esc(p.学生姓名)}</td><td>${esc(p.表扬理由||'—')}</td></tr>`).join('')+`</tbody></table>`;
+  }
+
+  // 重点关注提醒名单
+  if((rep.重点关注提醒名单||[]).length){
+    html+=`<h3>⚠️ 重点关注提醒名单</h3><table>
+      <thead><tr><th>学生姓名</th><th>存在问题（客观描述作业情况）</th></tr></thead><tbody>`+
+      rep.重点关注提醒名单.map(p=>`<tr><td>${esc(p.学生姓名)}</td><td>${esc(p.存在问题||'—')}</td></tr>`).join('')+`</tbody></table>`;
+  }
+
+  // 教学建议
+  html+=`<div class="hint" style="margin-top:14px"><b>📚 课堂教学建议：</b><br>${esc(rep.课堂教学建议||'—')}</div>`;
+  html+=`</div>`;
+  panel.innerHTML=html;
+}
+
+/* =========================================================================
+ *  小工具
+ * =======================================================================*/
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+// 把“错误人数占比”文本转成内联迷你扇形图（SVG）
+function miniPie(text){
+  const t = String(text||'').trim();
+  if(!t) return '—';
+  let pct = 0;
+  const mPct = t.match(/(\d+(?:\.\d+)?)\s*%/);
+  if(mPct){ pct = parseFloat(mPct[1]); }
+  else if(t.includes('/')){
+    const [a,b] = t.split('/').map(x=>parseFloat(x.trim()));
+    if(b>0) pct = Math.round(a/b*100);
+  } else {
+    const n = parseFloat(t);
+    if(!isNaN(n)) pct = n>1 ? n : Math.round(n*100);
+  }
+  pct = Math.max(0, Math.min(100, pct));
+  const rest = 100 - pct;
+  const color = pct >= 80 ? '#ef4444' : pct >= 50 ? '#f59e0b' : '#3b82f6';
+  return `<span class="mini-pie" title="错误人数占比：${esc(t)}">
+    <svg viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="15.9155" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+      <circle cx="16" cy="16" r="15.9155" fill="none" stroke="${color}" stroke-width="5" stroke-dasharray="${pct} ${rest}" stroke-dashoffset="25"/>
+      <text x="16" y="17" text-anchor="middle" font-size="8" fill="#374151" font-weight="700">${pct}%</text>
+    </svg>
+    <span class="mini-pie-text">${esc(t)}</span>
+  </span>`;
+}
+
+// 导出全班批改结果为 Excel（多工作表，重点分析错题）
+function exportStudentsXLSX(){
+  if(typeof XLSX==='undefined'){ setStatus($('gradeStatus'),'Excel 库加载失败，请检查网络','err'); return; }
+  if(!state.students.length){ setStatus($('gradeStatus'),'暂无批改结果可导出','err'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1：错题明细（重点）
+  const errRows=[];
+  for(const s of state.students){
+    const r=s.result||{};
+    const details=r.每道题批改明细||[];
+    for(const e of r.错题列表||[]){
+      const d=details.find(x=>String(x.题号)===String(e.题号))||{};
+      errRows.push({
+        '学生姓名': s.meta.name || r.学生姓名 || '（未命名）',
+        '班级': s.meta.cls || r.班级 || '',
+        '题号': e.题号 ?? '',
+        '题型': e.题型 || d.题型 || '',
+        '本题满分': e.本题满分 || d.本题满分 || '',
+        '学生得分': e.学生得分 || d.学生得分 || '',
+        '失分': e.失分 || '',
+        '学生作答摘要': e.学生作答摘要 || d.学生作答摘要 || '',
+        '参考答案': e.参考答案 || d.参考答案 || '',
+        '错误类型': e.错误类型 || '',
+        '得分说明': e.得分说明 || d.得分说明 || ''
+      });
+    }
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(errRows), '错题明细');
+
+  // Sheet 2：学生总览
+  const overviewRows=state.students.map(s=>{
+    const r=s.result||{};
+    const stat=r.个人作业统计||{};
+    const errors=r.错题列表||[];
+    return {
+      '学生姓名': s.meta.name || r.学生姓名 || '（未命名）',
+      '班级': s.meta.cls || r.班级 || '',
+      '实际得分': r.实际得分 ?? '',
+      '试卷满分': r.试卷满分 ?? '',
+      '正确率': stat.正确率 ?? '',
+      '做错题目数': stat.做错题目数 ?? errors.length,
+      '错题题号': errors.map(e=>e.题号).filter(x=>x!==undefined&&x!==null).join('、')
+    };
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(overviewRows), '学生总览');
+
+  // Sheet 3：高频错题统计
+  const errMap={};
+  for(const s of state.students){
+    const r=s.result||{};
+    const details=r.每道题批改明细||[];
+    const name=s.meta.name || r.学生姓名 || '（未命名）';
+    for(const e of r.错题列表||[]){
+      const no=e.题号 ?? '?';
+      if(!errMap[no]){
+        const d=details.find(x=>String(x.题号)===String(no))||{};
+        errMap[no]={题号:no, 题型:e.题型||d.题型||'', 本题满分:e.本题满分||d.本题满分||'', 参考答案:e.参考答案||d.参考答案||'', 错误人数:0, 做错学生:[]};
+      }
+      errMap[no].错误人数++;
+      errMap[no].做错学生.push(name);
+    }
+  }
+  const total=state.students.length||1;
+  const freqRows=Object.values(errMap).map(o=>({
+    '题号': o.题号,
+    '题型': o.题型,
+    '本题满分': o.本题满分,
+    '参考答案': o.参考答案,
+    '错误人数': o.错误人数,
+    '错误率': (o.错误人数/total*100).toFixed(1)+'%',
+    '做错学生': o.做错学生.join('、')
+  })).sort((a,b)=>b['错误人数']-a['错误人数']);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(freqRows), '高频错题统计');
+
+  XLSX.writeFile(wb, '全班批改结果.xlsx');
+  setStatus($('gradeStatus'),'✅ 已导出 Excel（含错题明细 / 学生总览 / 高频错题统计）','ok');
+}
+
+function download(name, text){
+  const blob=new Blob([text],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// 一键生成自包含、跨系统/跨电脑的本地代理启动脚本并自动连接
+$('btnStartProxy').addEventListener('click', async ()=>{
+  // 已运行则直接提示
+  let port=await detectLocalProxyPort();
+  if(port){ setStatus($('cfgStatus'),`✅ 本地代理已在运行（端口 ${port}）`,'ok'); return; }
+  const src=document.getElementById('proxySrc').textContent;
+  const isWin=/Win/i.test(navigator.userAgent);
+  let name, content;
+  if(isWin){
+    name='一键启动代理.bat';
+    // 将源码做 UTF-8 → base64，分块 echo 写入文件（规避 cmd 单行长度限制），再 certutil 解码
+    const b64=btoa(unescape(encodeURIComponent(src)));
+    const chunks=b64.match(/.{1,1500}/g)||[b64];
+    const writes=chunks.map((c,i)=>(i===0?`echo ${c}>_p.b64`:`echo ${c}>>_p.b64`)).join('\n');
+    content=
+`@echo off
+chcp 65001 >nul
+setlocal
+set "NODE="
+where node >nul 2>nul && set "NODE=node"
+if not defined NODE ( if exist "%ProgramFiles%\\nodejs\\node.exe" set "NODE=%ProgramFiles%\\nodejs\\node.exe" )
+if not defined NODE ( for /d %%d in ("%USERPROFILE%\\.workbuddy\\binaries\\node\\versions\\*") do ( if exist "%%d\\node.exe" set "NODE=%%d\\node.exe" ) )
+if not defined NODE ( echo 未找到 Node.js，请先安装 Node 或运行 WorkBuddy。 & pause & exit /b 1 )
+${writes}
+certutil -decode _p.b64 proxy.js >nul 2>nul
+if exist _p.b64 del _p.b64 >nul 2>nul
+echo 正在启动本地代理，请勿关闭本窗口...
+"%NODE%" proxy.js
+pause`;
+  } else {
+    name='一键启动代理.sh';
+    content=
+`#!/bin/bash
+NODE=node
+command -v node >/dev/null 2>&1 || NODE="$HOME/.workbuddy/binaries/node/versions/22.22.2/node"
+if [ ! -x "$NODE" ] && [ ! -f "$NODE" ]; then echo "未找到 Node.js，请先安装。"; exit 1; fi
+cat > proxy.js <<'PROXY_EOF'
+${src}
+PROXY_EOF
+"$NODE" proxy.js`;
+  }
+  const blob=new Blob([content],{type:'application/octet-stream'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
+  setStatus($('cfgStatus'),`已下载「${name}」，请双击运行。网页正在自动等待代理连接…`,'ok');
+  // 自动等待连接（最多约 50 秒）
+  for(let i=0;i<25;i++){
+    await new Promise(r=>setTimeout(r,2000));
+    port=await detectLocalProxyPort();
+    if(port){ setStatus($('cfgStatus'),`✅ 本地代理已连接（端口 ${port}），可开始批改`,'ok'); return; }
+  }
+  setStatus($('cfgStatus'),'未能自动连上代理：请确认脚本是否已双击运行（保持黑框开启）。','err');
+});
+
+/* =========================================================================
+ *  初始化
+ * =======================================================================*/
+(function init(){
+  loadAll();
+  fillCfgForm();
+  if(state.rubric){ renderRubric(); $('rubricCard').classList.remove('hidden'); }
+  updateTabsLock();
+  applyModeUI();   // 根据当前批改模式显隐对应区域
+  renderTypeSummary();
+  renderStudents();
+  if(state.lastReport) renderReport(state.lastReport);
+  if(state.rubricConfirmed) $('rubricLockedHint').textContent='🔒 评分标准已锁定启用。如需修改，请到本节“清空重传”后重新解析。';
+  log('系统初始化完成。');
+})();
+</script>
+</body>
+</html>
