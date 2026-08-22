@@ -483,7 +483,7 @@ const server = http.createServer((req, res) => {
  *  全局状态
  * =======================================================================*/
 const state = {
-  api: { baseURL:'', apiKey:'', model:'', proxy:'', useLocalProxy:false, responseFormat:true },
+  api: { baseURL:'https://token.sensenova.cn/v1', apiKey:'', model:'', proxy:'https://corsproxy.io/?url=', useLocalProxy:false, responseFormat:true },
   rubric: null,            // 解析+教师校对后的评分标准（即 Prompt1 的输出结构）
   rubricConfirmed: false,  // 是否确认启用（未确认不允许批改）
   queue: [],               // 待批改队列：{name, cls, files:[File]}
@@ -926,6 +926,12 @@ function saveAll(){
 function loadAll(){
   try{
     const a=localStorage.getItem('mg_api'); if(a) state.api=JSON.parse(a);
+    // 迁移：旧配置若仍用本地代理，自动切到公共 CORS 代理（无需本机 Node/端口）
+    if(state.api.useLocalProxy){
+      state.api.useLocalProxy=false;
+      if(!state.api.proxy) state.api.proxy='https://corsproxy.io/?url=';
+      try{ localStorage.setItem('mg_api', JSON.stringify(state.api)); }catch(e){}
+    }
     const r=localStorage.getItem('mg_rubric'); if(r) state.rubric=JSON.parse(r);
     state.rubricConfirmed = localStorage.getItem('mg_rubricConfirmed')==='1';
     const s=localStorage.getItem('mg_students'); if(s) state.students=JSON.parse(s);
