@@ -449,6 +449,7 @@ const server = http.createServer((req, res) => {
       <h2>📊 全班批改结果总览</h2>
       <div id="studentsOverview"></div>
       <div class="btn-row">
+        <button class="btn-primary btn-sm" id="btnSyncStudents">🔄 同步合并同名</button>
         <button class="btn-ghost btn-sm" id="btnExportStudents">导出全班批改 Excel</button>
         <button class="btn-danger btn-sm" id="btnClearStudents">清空所有批改</button>
       </div>
@@ -1259,29 +1260,15 @@ $('btnBatchGrade').addEventListener('click', async ()=>{
     log('批改开始：'+item.name);
     try{
       const result=await gradeOne(item);   // ← 客观题离线 + 主观题调 Prompt2（内部拆分）
-      const ti=findMergeTarget(item.name);
-      if(ti>=0){
-        // 同一学生已存在 → 合并两次批改（如先批客观再批主观，或反之）
-        const merged=mergeStudentResult(state.students[ti].result, result);
-        state.students[ti]={meta: state.students[ti].meta, result: merged};
-        if(!state.students[ti].meta.name && item.name) state.students[ti].meta.name=item.name;
-        if(!state.students[ti].meta.cls && item.cls) state.students[ti].meta.cls=item.cls;
-        log('✅ 合并完成：'+item.name+' 得分 '+(merged.实际得分||'?'));
-      }else{
-        state.students.push({meta:{name:item.name,cls:item.cls}, result});
-        log('✅ 完成：'+item.name+' 得分 '+(result.实际得分||'?'));
-      }
+      // 批改时不再自动合并：每条批改独立成记录，避免误并不同学生。
+      // 如需把同一学生的多份结果（如先批客观、再批主观）合并成一张，点「同步合并同名」按钮。
+      state.students.push({meta:{name:item.name,cls:item.cls}, result});
+      log('✅ 完成：'+item.name+' 得分 '+(result.实际得分||'?'));
     }catch(e){
       log('❌ '+item.name+' 失败：'+e.message);
       const failResult={学生姓名:item.name,班级:item.cls,实际得分:'—',错误:'批改失败：'+e.message,
                 每道题批改明细:[],错题列表:[],个人作业统计:{},个人学情建议:''};
-      const ti=findMergeTarget(item.name);
-      if(ti>=0){
-        const merged=mergeStudentResult(state.students[ti].result, failResult);
-        state.students[ti]={meta: state.students[ti].meta, result: merged};
-      }else{
-        state.students.push({meta:{name:item.name,cls:item.cls}, result:failResult});
-      }
+      state.students.push({meta:{name:item.name,cls:item.cls}, result:failResult});
     }
   }
   $('gradeProg').firstElementChild.style.width='100%';
@@ -1398,6 +1385,37 @@ function findMergeTarget(name){
 $('btnClearStudents').addEventListener('click',()=>{
   if(!confirm('确定清空所有已批改结果？')) return;
   state.students=[]; renderStudents(); saveAll();
+});
+
+/* 手动同步：把同名学生的多条批改合并成一条（默认不自动合并，避免误并不同学生）。
+ * 规则：按姓名分组；未命名（空名）记录各自独立、不参与合并（防止把不同学生误并）。
+ *       同名多条 → 按明细数量升序依次 mergeStudentResult，明细最多者最后覆盖，保证最完整。 */
+$('btnSyncStudents').addEventListener('click',()=>{
+  if(!state.students.length){ setStatus($('gradeStatus'),'暂无批改结果可同步','err'); return; }
+  const groups={};
+  state.students.forEach((s,idx)=>{
+    const key=((s.meta.name||'')).trim();
+    (groups[key]=groups[key]||[]).push(idx);
+  });
+  let students=[], mergedGroups=0;
+  Object.entries(groups).forEach(([key,idxs])=>{
+    if(!key){ idxs.forEach(i=>students.push(state.students[i])); return; } // 未命名：保持独立
+    if(idxs.length===1){ students.push(state.students[idxs[0]]); return; }
+    const ordered=idxs.slice().sort((a,b)=>
+      (state.students[a].result.每道题批改明细||[]).length -
+      (state.students[b].result.每道题批改明细||[]).length);
+    let merged=state.students[ordered[0]].result;
+    for(let k=1;k<ordered.length;k++){
+      merged=mergeStudentResult(merged, state.students[ordered[k]].result);
+    }
+    students.push({meta:state.students[ordered[0]].meta, result:merged});
+    mergedGroups++;
+  });
+  state.students=students;
+  saveAll(); renderStudents();
+  const dup=Object.values(groups).filter(a=>a.length>1).length;
+  setStatus($('gradeStatus'), `✅ 同步完成：合并 ${mergedGroups} 组同名记录，现共 ${state.students.length} 人`,'ok');
+  log('手动同步合并：合并 '+mergedGroups+' 组，未命名 '+Object.keys(groups).filter(k=>!k).length+' 组保持独立，剩余 '+state.students.length+' 条');
 });
 
 // 渲染全班总览 + 每位学生详情（含识别存疑手动改分）
