@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light">
-<head>
-<meta charset="UTF-8">
+<!-- saved from url=(0067)file:///D:/%E5%B8%8C%E5%87%A1%E5%B7%A5%E4%BD%9C%E5%8F%B0/index.html -->
+<html lang="zh-CN" data-theme="light"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>希凡工作台</title>
 <style>
@@ -104,8 +104,18 @@ textarea{resize:vertical}
 .section-h::before{content:"";width:4px;height:16px;background:var(--primary);border-radius:3px}
 .grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
-.stat .num{font-size:28px;font-weight:800;color:var(--primary)}
-.stat .lbl{font-size:12px;color:var(--muted);margin-top:4px}
+  .stat .num{font-size:28px;font-weight:800;color:var(--primary)}
+  .stat .lbl{font-size:12px;color:var(--muted);margin-top:4px}
+  /* 可点击的分层卡片 */
+  .stat.layer-card{cursor:pointer;transition:all .15s;position:relative}
+  .stat.layer-card:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:0 6px 14px rgba(46,158,91,.18)}
+  .stat.layer-card.active{border-color:var(--primary);background:linear-gradient(135deg,#f0faf3,#e8f7ee);box-shadow:0 4px 10px rgba(46,158,91,.22)}
+  .stat.layer-card .layer-arrow{float:right;font-size:14px;color:var(--muted);transition:transform .2s;display:inline-block;margin-left:4px}
+  .stat.layer-card.active .layer-arrow{transform:rotate(180deg);color:var(--primary)}
+  /* 折叠区 */
+  .layer-detail{margin:8px 0 18px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:14px;animation:layerExpand .25s ease}
+  .layer-detail[hidden]{display:none}
+  @keyframes layerExpand{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
 .card-h{font-weight:700;margin-bottom:12px;font-size:15px;display:flex;align-items:center;justify-content:space-between}
@@ -116,10 +126,22 @@ textarea{resize:vertical}
 .btn.primary{background:var(--primary);color:var(--primary-text);border-color:var(--primary)}
 .btn.primary:hover{background:var(--primary-d)}
 .btn.danger{color:var(--danger);border-color:var(--danger)}
+.hidden{display:none!important}
+.st-batch{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:9px 14px;background:var(--chip);border:1px solid var(--border);border-radius:10px;font-weight:600}
+.item.sel{background:var(--chip);border-color:var(--primary)}
+.check{cursor:pointer;user-select:none}
+.check:hover{opacity:.85}
 .btn.sm{padding:5px 10px;font-size:12px}
 .btn.ghost{background:transparent;border-style:dashed;color:var(--muted)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .row.end{justify-content:flex-end}
+/* 科目 chip 选择器 */
+.subj-chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:38px;padding:8px 10px;border:1px dashed var(--border);border-radius:10px;background:var(--hover);margin:6px 0 8px}
+.subj-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--chip);color:var(--text);border-radius:999px;font-size:13px;font-weight:600;border:1px solid var(--border)}
+.subj-chip b{cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding:0 2px}
+.subj-chip b:hover{color:var(--danger)}
+.subj-empty{color:var(--muted);font-size:13px}
+.subj-add{margin-top:4px}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
 .field label{font-size:12px;color:var(--muted)}
 .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:var(--chip);color:var(--muted)}
@@ -129,6 +151,11 @@ textarea{resize:vertical}
 .tag.warn{background:rgba(245,166,35,.16);color:var(--warn)}
 .tag.important{background:rgba(245,166,35,.18);color:var(--warn)}
 .tag.urgent{background:rgba(229,72,77,.16);color:var(--danger)}
+.weak-chip{display:inline-flex;align-items:center;gap:6px;cursor:pointer;text-decoration:none;transition:.15s;font-size:12px!important;padding:5px 12px!important}
+.weak-chip:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(0,0,0,.08);filter:brightness(0.97)}
+.weak-chip.active{outline:2px solid currentColor;outline-offset:2px;font-weight:700}
+.weak-chip .weak-chev{font-size:10px;opacity:.7;transition:.2s;display:inline-block}
+.weak-chip.active .weak-chev{transform:rotate(180deg)}
 
 .list{display:flex;flex-direction:column;gap:10px}
 .item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 15px;display:flex;align-items:flex-start;gap:12px;transition:.18s}
@@ -176,19 +203,98 @@ textarea{resize:vertical}
 .empty .big{font-size:34px;margin-bottom:8px;opacity:.5}
 
 /* 座位 / 课表 网格 */
-.seat-layout{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.seat-layout{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;min-height:540px}
 .seat-pool{width:150px;flex-shrink:0;background:var(--chip);border:1px solid var(--border);border-radius:12px;padding:12px}
 .seat-pool-h{font-weight:700;font-size:13px;margin-bottom:8px}
 .seat-pool-list{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto}
 .pool-item{padding:7px 10px;background:var(--card);border:1px solid var(--input-b);border-radius:8px;font-size:13px;cursor:grab;text-align:center;user-select:none}
 .pool-item:active{cursor:grabbing}
-.seat-grid{display:grid;gap:5px;flex:1;min-width:300px}
-.seat{aspect-ratio:1;min-height:34px;border:1.5px dashed var(--input-b);border-radius:8px;display:flex;align-items:center;justify-content:center;
-  font-size:12px;text-align:center;padding:2px;cursor:pointer;background:var(--card);transition:.15s;user-select:none}
-.seat.rowlabel{aspect-ratio:auto;min-height:34px;border:none;background:var(--chip);font-weight:700;color:var(--muted);cursor:default}
-.seat.filled{border-style:solid;border-color:var(--primary);background:var(--chip);font-weight:600;color:var(--text);cursor:grab}
+/* 座位网格：固定高度让每格 1fr 平铺整个区域 */
+.seat-grid{
+  display:grid;gap:4px;flex:1;min-width:0;position:relative;
+  height:clamp(520px,min(72vh,820px),760px);
+  background:linear-gradient(135deg,#f6fbff 0%,#eaf3ff 100%);
+  border:1px solid var(--border);border-radius:14px;padding:12px;
+}
+.seat{aspect-ratio:auto;min-height:0;min-width:0;border:1.5px dashed var(--input-b);border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:12px;text-align:center;padding:2px;cursor:pointer;background:var(--card);transition:.15s;user-select:none;overflow:hidden}
+.seat.rowlabel{aspect-ratio:auto;min-height:0;min-width:0;border:none;background:transparent;font-weight:700;color:var(--muted);cursor:default;font-size:13px}
+.seat.corner{background:transparent;border:none;cursor:default}
+.seat.filled{border-style:solid;border-color:var(--primary);background:var(--chip);font-weight:700;color:var(--text);cursor:grab;font-size:18px;line-height:1.12;padding:1px 3px;word-break:break-all}
 .seat.filled:active{cursor:grabbing}
 .seat[draggable=true]:hover{box-shadow:0 2px 8px rgba(0,0,0,.12)}
+/* 走廊作为网格中的一条真实通道列（Excel 式插入），不占座位 */
+.seat.corridor-cell{background:repeating-linear-gradient(45deg,#eef4fb 0 7px,#e3edf8 7px 14px);border:none;cursor:default}
+.seat.corridor-h{background:transparent;border:none;color:#aebccd;cursor:pointer;font-size:12px;font-weight:700}
+.seat.corridor-h:hover{color:#e74c3c}
+/* 讲台作为网格中的一条真实通道行（Excel 式插入），不占座位 */
+.seat.podium-cell{background:linear-gradient(180deg,#d9c3a0,#c2a374);border:none;color:#5a3a18;font-weight:700;letter-spacing:6px;border-radius:8px;cursor:pointer}
+.seat.podium-cell:hover{filter:brightness(.96);color:#7a4a20}
+/* 被讲台覆盖的座位格：自动清掉内容、不可拖入 */
+.seat.blocked{
+  background:repeating-linear-gradient(45deg,#f1f6fc 0 6px,#e8f0f9 6px 12px);
+  border:1.5px dotted #b8c5d5;border-radius:8px;
+  color:#94a3b8;font-size:11px;cursor:not-allowed;opacity:.78;
+  position:relative;
+}
+.seat.blocked::after{content:'×';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#b8c5d5;font-weight:600;font-size:14px}
+/* 走廊 / 讲台覆盖层（绝对定位、可拖动、按班独立保存） */
+.seat-overlay{position:absolute;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;border-radius:8px;user-select:none;cursor:move;z-index:5;
+  border:1.5px dashed currentColor;box-shadow:0 2px 8px rgba(0,0,0,.08);transition:box-shadow .15s,transform .12s}
+.seat-overlay:hover{box-shadow:0 5px 16px rgba(0,0,0,.16);transform:translateY(-1px)}
+.seat-overlay.dragging{opacity:.85;cursor:grabbing;transform:scale(1.01);box-shadow:0 10px 24px rgba(0,0,0,.22)}
+.seat-overlay.corridor{background:rgba(255,225,140,.78);color:#7a5400;border-color:#a07a00;letter-spacing:6px}
+.seat-overlay.podium{background:linear-gradient(180deg,rgba(196,164,124,.92),rgba(168,128,82,.92));color:#fff;border-color:#5a3a18;letter-spacing:8px;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+/* 右上角删除按钮：hover 才显示 */
+.seat-overlay-x{
+  position:absolute;top:3px;right:5px;display:none;align-items:center;justify-content:center;
+  font-size:16px;line-height:16px;font-weight:700;color:rgba(0,0,0,.45);cursor:pointer;
+  width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.85);
+  transition:background .15s,color .15s;
+}
+.seat-overlay:hover .seat-overlay-x{display:flex;}
+.seat-overlay-x:hover{background:#fff;color:#c0392b;box-shadow:0 0 0 2px #c0392b33}
+
+/* 班级切换 tabs */
+.stu-cls-tabs{margin-bottom:14px}
+.stu-cls-tabs .tab{font-size:14px;padding:7px 18px}
+.stu-cls-tabs .tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+
+.stu-cell{aspect-ratio:1;border:1px solid var(--input-b);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;background:var(--card);cursor:pointer;user-select:none;padding:2px;transition:.12s;position:relative;overflow:hidden}
+.stu-cell:hover{border-color:var(--primary);background:var(--chip)}
+.stu-cell .nm{font-size:13px;font-weight:700;color:var(--text);line-height:1.15;word-break:break-all}
+.stu-cell .sub{font-size:10px;color:var(--muted);margin-top:1px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stu-cell.empty{border-style:dashed;color:var(--muted);font-size:12px}
+.stu-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;max-width:1100px;margin:0 auto}
+@media (max-width:1200px){.stu-grid{grid-template-columns:repeat(6,1fr)}}
+@media (max-width:900px){.stu-grid{grid-template-columns:repeat(5,1fr)}}
+@media (max-width:600px){.stu-grid{grid-template-columns:repeat(4,1fr)}}
+
+/* 考勤点名：单元格（复用 stu-grid 布局，三态边框 + 点击循环切换） */
+.at-grid{gap:8px;max-width:1300px}
+.at-cell{position:relative;overflow:hidden;aspect-ratio:auto;min-height:96px;padding:8px 6px;border-width:2px;border-radius:12px}
+.at-cell .nm{font-size:17px;font-weight:700;color:var(--text);line-height:1.2;word-break:break-all}
+.at-cell .sub{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.at-cell .st-tag{position:absolute;left:7px;bottom:7px;width:14px;height:14px;border-radius:50%;background:var(--success);box-shadow:0 0 0 2px rgba(0,0,0,.06)}
+.at-cell.st-late .st-tag{background:var(--warn)}
+.at-cell.st-absent .st-tag{background:var(--danger)}
+.at-cell.st-present{border-color:var(--success);background:rgba(46,158,91,.08)}
+.at-cell.st-late{border-color:var(--warn);background:rgba(245,166,35,.08)}
+.at-cell.st-absent{border-color:var(--danger);background:rgba(229,72,77,.08)}
+.at-cell.st-absent .nm{text-decoration:line-through;color:var(--muted)}
+.at-cell .quick{display:none;position:absolute;right:4px;top:4px;gap:3px}
+.at-cell:hover .quick{display:flex}
+.at-cell .qb{font-size:12px;line-height:1;padding:4px 6px;border-radius:5px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer}
+.at-cell .qb:hover{background:var(--success);color:#fff;border-color:var(--success)}
+/* 学生档案：单元格弹出的操作菜单 */
+.stu-menu{position:fixed;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:6px;z-index:9000;min-width:120px;animation:popIn .14s ease}
+.stu-menu button{display:block;width:100%;text-align:left;padding:8px 12px;font-size:14px;border:none;background:transparent;border-radius:7px;cursor:pointer;color:var(--text);font-family:inherit}
+.stu-menu button:hover{background:var(--chip)}
+.stu-menu button.danger{color:#d33}
+.stu-menu button.danger:hover{background:#fff0f0}
+@keyframes popIn{from{opacity:0;transform:translateY(-4px) scale(.96)}to{opacity:1;transform:none}}
 .sched-grid{display:grid;gap:3px}
 .sched-cell{border:1px solid var(--border);border-radius:7px;min-height:38px;padding:4px;font-size:13px;line-height:1.35;text-align:center;
   display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--card);cursor:pointer;transition:.15s}
@@ -212,7 +318,54 @@ textarea{resize:vertical}
 table.tb{width:100%;border-collapse:collapse;font-size:13px}
 table.tb th,table.tb td{border:1px solid var(--border);padding:8px 10px;text-align:center}
 table.tb th{background:var(--chip);font-weight:700}
+/* 可滚表头（个体学生分析等长表格）：限制 max-height 后，thead 在容器内吸顶 */
+.scroll-x.tb-sticky{max-height:60vh;overflow:auto}
+.scroll-x.tb-sticky table.tb th{position:sticky;top:0;z-index:5;background:var(--chip)}
+.scroll-x.tb-sticky table.tb thead{position:sticky;top:0}
 table.tb tr:nth-child(even) td{background:var(--hover)}
+
+/* 成绩趋势 · 颜色单元格 */
+table.tb td.cell-good{background:rgba(46,158,91,.18)!important;color:#1f7a45;font-weight:700}
+  table.tb td.cell-bad{background:rgba(227,91,91,.18)!important;color:#b53a3a;font-weight:700}
+  table.tb td.cell-mid{background:rgba(240,160,32,.14)!important;color:#a06a14}
+  table.tb td.cell-good.diff-pos{position:relative}
+  table.tb td.cell-bad.diff-neg{position:relative}
+  /* 全班对比表里可点击的姓名 */
+  a.stu-link{color:var(--primary);text-decoration:none;cursor:pointer}
+  a.stu-link:hover{text-decoration:underline;color:var(--primary)}
+
+/* 成绩趋势 · 大字均分 */
+.big-num{font-size:38px;font-weight:800;color:var(--primary);line-height:1}
+.big-num-lbl{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* 成绩趋势 · 科目筛选 chip */
+.chip{display:inline-block;padding:6px 14px;border-radius:20px;background:var(--chip);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);transition:.15s}
+.chip:hover{background:var(--hover)}
+.chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+
+/* 成绩趋势 · 单科折线卡片（两列网格） */
+#stuCurves{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.subj-curve-card{border:1px solid var(--border);border-radius:14px;padding:14px;background:var(--card);min-width:0}
+.subj-curve-card .row.between{align-items:center}
+.subj-curve-card canvas{display:block;width:100%!important;height:160px;margin-top:6px}
+@media (max-width:900px){#stuCurves{grid-template-columns:1fr}}
+
+/* 成绩趋势 · 导出区 */
+.trend-export-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;justify-content:flex-end}
+
+/* 成长曲线头部 */
+.stu-header{display:flex;align-items:center;gap:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(46,158,91,.08),rgba(58,142,230,.06));border:1px solid var(--border);border-radius:14px;margin-bottom:12px}
+.stu-header .avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#4a90e2,#357abd);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.stu-header .info{flex:1}
+.stu-header .info .nm{font-size:18px;font-weight:700}
+.stu-header .info .sub{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* 考试记录卡片（仿参考图） */
+.exam-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:10px;cursor:pointer;transition:.15s}
+.exam-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px -4px rgba(0,0,0,.08)}
+.exam-card .nm{font-size:17px;font-weight:700;margin-bottom:4px}
+.exam-card .meta{font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.exam-card .meta .pill{font-size:11px}
 
 .copy-toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);
   padding:10px 20px;border-radius:30px;font-size:13px;z-index:200;opacity:0;transition:.3s;pointer-events:none}
@@ -329,10 +482,10 @@ body.show-rotate .rotate-tip{display:flex}
   <div class="topbar">
     <div class="brand-block">
       <div class="brand"><span class="dot"></span>希凡工作台</div>
-      <div class="brand-sub">班主任 & 教师工作台</div>
+      <div class="brand-sub">班主任 &amp; 教师工作台</div>
     </div>
     <span class="term" id="termLabel">2026-2027 第一学期</span>
-    <div class="topbar-date"><span id="topDateText"></span><span class="weekday-badge" id="topWeekday"></span></div>
+    <div class="topbar-date"><span id="topDateText">2026年8月24日</span><span class="weekday-badge" id="topWeekday">周一</span></div>
     <div class="toolbar">
       <button class="icon-btn" data-action="open-calendar" title="日历">📅 日历</button>
       <button class="icon-btn" data-action="open-stats" title="统计">📊 统计</button>
@@ -344,8 +497,27 @@ body.show-rotate .rotate-tip{display:flex}
     </div>
   </div>
   <div class="body">
-    <div class="sidebar" id="sidebar"></div>
-    <div class="content" id="content"></div>
+    <div class="sidebar" id="sidebar"><div class="side-grip" title="拖动可移动导航栏"><i></i><i></i><i></i></div><div class="nav-item" draggable="true" data-view="home" title="班级首页（可拖动排序）">
+    <span class="ch">🏠</span><span class="name">班级首页</span></div><div class="nav-item" draggable="true" data-view="students" title="学生档案（可拖动排序）">
+    <span class="ch">🧑‍🎓</span><span class="name">学生档案</span></div><div class="nav-item" draggable="true" data-view="seats" title="座位管理（可拖动排序）">
+    <span class="ch">🪑</span><span class="name">座位管理</span></div><div class="nav-item" draggable="true" data-view="grades" title="成绩分析（可拖动排序）">
+    <span class="ch">📊</span><span class="name">成绩分析</span></div><div class="nav-item" draggable="true" data-view="knowledge" title="知识点（可拖动排序）">
+    <span class="ch">💡</span><span class="name">知识点</span></div><div class="nav-item" draggable="true" data-view="schedule" title="课程表（可拖动排序）">
+    <span class="ch">📅</span><span class="name">课程表</span></div><div class="nav-item" draggable="true" data-view="attendance" title="考勤（可拖动排序）">
+    <span class="ch">✅</span><span class="name">考勤</span></div><div class="nav-item" draggable="true" data-view="emergency" title="应急备忘（可拖动排序）">
+    <span class="ch">🚨</span><span class="name">应急备忘</span></div><div class="nav-item" draggable="true" data-view="archive" title="档案归档（可拖动排序）">
+    <span class="ch">🗂️</span><span class="name">档案归档</span></div><div class="nav-item active" draggable="true" data-view="grading" title="AI阅卷（可拖动排序）">
+    <span class="ch">📝</span><span class="name">AI阅卷</span></div></div>
+    <div class="content" id="content" style="margin-left: 119.989px; margin-right: 0px;"><div class="view active" id="v_grading">
+  <div style="height:100%;display:flex;flex-direction:column;overflow:hidden">
+    <div id="gradingWrap" style="flex: 1 1 0%; overflow: auto; display: block;">
+      <iframe id="gradingFrame" style="width:100%;height:1400px;border:none;display:block" src="./希凡工作台_files/math-grader.html"></iframe>
+    </div>
+    <div id="gradingLoading" style="flex: 1 1 0%; display: none; align-items: center; justify-content: center; color: var(--muted); font-size: 15px;">
+      <div style="text-align:center">⏳ 正在加载阅卷系统…<br><span style="font-size:12px;color:var(--muted)">首次加载可能需要 2~3 秒</span></div>
+    </div>
+    <div id="gradingError" style="flex:1;display:none;align-items:center;justify-content:center;color:var(--danger);text-align:center;font-size:14px;padding:30px"></div>
+  </div></div></div>
   </div>
 </div>
 
@@ -402,10 +574,9 @@ function seed(){
     phraseCats:['全部','表扬鼓励','课堂管理','家校沟通','纪律提醒','日常问候','学生评语','其他'],
     aiHistory:[],
     students:[],
-    seats:{rows:8,cols:8,layout:{}},
+    classes:[{id:'1',name:'1班'},{id:'2',name:'2班'}],
+    seats:{rows:8,cols:8,layouts:{'1':{},'2':{}}},
     exams:[],
-    duty:{groups:['第一组','第二组','第三组','第四组','第五组','第六组'],schedule:{}},
-    contacts:[],
     knowledge:[],
     schedule:{periods:['晨读','第1节','第2节','第3节','第4节','午休','午餐','第5节','第6节','第7节','第8节','延时服务'],days:['周一','周二','周三','周四','周五'],grid:{}},
     attendance:[],
@@ -439,6 +610,10 @@ function load(){try{const r=localStorage.getItem(STORE_KEY);if(r){const o=JSON.p
   return o;}return seed();}catch(e){return seed();}}
 /* 旧默认（未改动）自动升级为新版结构 */
 function migrate(o){
+  if(!o.classes||!o.classes.length)o.classes=[{id:'1',name:'1班'},{id:'2',name:'2班'}];
+  if(o.seats && o.seats.layout && !o.seats.layouts){o.seats.layouts={'1':o.seats.layout};delete o.seats.layout;}
+  if(o.seats && !o.seats.layouts)o.seats.layouts={'1':{},'2':{}};
+  (o.classes||[]).forEach(c=>{if(o.seats&&o.seats.layouts&&!o.seats.layouts[c.id])o.seats.layouts[c.id]={};});
   if(o.seats && o.seats.rows===6 && o.seats.cols===7){o.seats.rows=8;o.seats.cols=8;}
   if(o.schedule && o.schedule.periods && o.schedule.periods.length===6){
     o.schedule.periods=['晨读','第1节','第2节','第3节','第4节','午休','午餐','第5节','第6节','第7节','第8节','延时服务'];
@@ -475,14 +650,16 @@ function applyRemote(payload){
   if(!payload||!payload.db)throw new Error('云端数据格式异常');
   DB=payload.db;
   // 兼容老数据字段
-  if(!DB.seats)DB.seats={rows:8,cols:8,layout:{}};
+  if(!DB.classes||!DB.classes.length)DB.classes=[{id:'1',name:'1班'},{id:'2',name:'2班'}];
+  if(!DB.seats)DB.seats={rows:8,cols:8,layouts:{'1':{},'2':{}}};
+  if(DB.seats.layout && !DB.seats.layouts){DB.seats.layouts={'1':DB.seats.layout};delete DB.seats.layout;}
+  if(!DB.seats.layouts)DB.seats.layouts={'1':{},'2':{}};
+  DB.classes.forEach(c=>{if(!DB.seats.layouts[c.id])DB.seats.layouts[c.id]={};});
   if(!DB.schedule)DB.schedule={periods:['晨读','第1节','第2节','第3节','第4节','午休','午餐','第5节','第6节','第7节','第8节','延时服务'],days:['周一','周二','周三','周四','周五'],grid:{}};
   if(!DB.todos)DB.todos=[];
   if(!DB.students)DB.students=[];
   if(!DB.phrases)DB.phrases=[];
-  if(!DB.contacts)DB.contacts=[];
   if(!DB.exams)DB.exams=[];
-  if(!DB.duty)DB.duty=[];
   if(!DB.knowledge)DB.knowledge=[];
   if(!DB.attendance)DB.attendance=[];
   if(!DB.emergency)DB.emergency=[];
@@ -591,8 +768,44 @@ function startSyncPolling(interval){
 let DB = load();
 
 /* 国家课程方案（山东初中）可选课程 */
-const SHANDONG_COURSES=['语文','数学','英语','道德与法治','历史','地理','物理','化学','生物',
-  '信息科技','体育与健康','音乐','美术','劳动','综合实践活动','班团队活动','地方与校本课程','心理健康','自习','阅读','社团活动'];
+const SHANDONG_COURSES=['语文','数学','英语','科学','道德与法治','历史','地理','物理','化学','生物',
+'信息科技','体育与健康','音乐','美术','劳动','综合实践活动','班团队活动','地方与校本课程','心理健康','自习','阅读','社团活动'];
+/* 常见科目近义词 → 标准名（用户Excel可能写"道法/科学/电脑/思品"等，统一识别为山东省规范名称） */
+const COURSE_ALIAS={
+  '道法':'道德与法治','道德':'道德与法治','品德':'道德与法治','品德与社会':'道德与法治','思品':'道德与法治','思想品德':'道德与法治','法治':'道德与法治',
+  '科学':'科学','常识':'科学',
+  '体育':'体育与健康','体育课':'体育与健康',
+  '音乐':'音乐','音乐课':'音乐',
+  '美术':'美术','美术课':'美术','绘画':'美术',
+  '劳动':'劳动','劳动课':'劳动','劳动与技术':'劳动',
+  '信息':'信息科技','信息技术':'信息科技','电脑':'信息科技','微机':'信息科技',
+  '综合':'综合实践活动','综合实践':'综合实践活动',
+  '心理':'心理健康','心理健康课':'心理健康',
+  '阅读':'阅读','阅读课':'阅读'
+};
+/* 「个体学生分析」强弱判定标准（老师可在看板顶部修改，立即生效；持久化到 localStorage） */
+/* 强弱判定标准：全局默认 + 各学科独立覆盖
+   default = {strong:85, weak:60}（全校默认）
+   perSubject = { '语文': {strong:90, weak:60}, '数学': {...} }（按学科覆盖） */
+var RULES={default:{strong:85,weak:60},perSubject:{}};
+try{
+  const saved=JSON.parse(localStorage.getItem('xifan_rules')||'null');
+  if(saved&&typeof saved==='object'){
+    if(saved.default&&typeof saved.default.strong==='number'&&typeof saved.default.weak==='number'){
+      RULES.default=saved.default;
+    }
+    if(saved.perSubject&&typeof saved.perSubject==='object'){
+      RULES.perSubject=saved.perSubject;
+    }
+  }
+}catch(e){}
+/* 读取某学科的强项线/弱项线（无独立设置则用 default） */
+function ruleFor(subj){
+  const p=RULES.perSubject[subj];
+  if(p&&typeof p.strong==='number'&&typeof p.weak==='number')return p;
+  return RULES.default;
+}
+function saveRules(){try{localStorage.setItem('xifan_rules',JSON.stringify(RULES));}catch(e){}}
 /* 晨读（早读）可选内容 */
 const READING_COURSES=['晨读·语文','晨读·英语','晨读·经典诵读','语文','英语','英语口语','经典诵读','阅读'];
 const SPECIAL_ROWS=['午休','午餐','延时服务']; /* 非授课节次，可填休息/活动类 */
@@ -641,8 +854,6 @@ const NAV=[
   {ch:'🧑‍🎓',name:'学生档案',view:'students'},
   {ch:'🪑',name:'座位管理',view:'seats'},
   {ch:'📊',name:'成绩分析',view:'grades'},
-  {ch:'🧹',name:'值日排班',view:'duty'},
-  {ch:'📞',name:'家校联系',view:'contact'},
   {ch:'💡',name:'知识点',view:'knowledge'},
   {ch:'📅',name:'课程表',view:'schedule'},
   {ch:'✅',name:'考勤',view:'attendance'},
@@ -699,8 +910,8 @@ let CUR='home';
 function showView(v){
   CUR=v;
   $$('#sidebar .nav-item').forEach(e=>e.classList.toggle('active',e.dataset.view===v));
-  const map={home:renderHome,students:renderStudents,seats:renderSeats,grades:renderGrades,duty:renderDuty,
-    contact:renderContact,knowledge:renderKnowledge,schedule:renderSchedule,attendance:renderAttendance,
+  const map={home:renderHome,students:renderStudents,seats:renderSeats,grades:renderGrades,
+    knowledge:renderKnowledge,schedule:renderSchedule,attendance:renderAttendance,
     emergency:renderEmergency,archive:renderArchive,grading:renderGrading};
   const c=$('#content');
   c.innerHTML=`<div class="view active" id="v_${v}"></div>`;
@@ -723,6 +934,26 @@ function handleAction(a,el,e){
     case 'close-modal':closeModal();break;
     case 'quick-todo':openQuickTodoModal();break;
     case 'open-ai':openAiModal();break;
+    case 'cls-manage':openClassManager();break;
+    case 'open-doubao':{
+      /* 优先尝试 doubao:// 协议唤起豆包桌面客户端；唤起成功（页面切走 hidden=true）则不再回退；
+         唤起失败/未安装桌面端则打开网页版 https://www.doubao.com/chat/ */
+      const ua=navigator.userAgent;
+      const isMac=/Mac/i.test(ua),isWin=/Windows/i.test(ua);
+      const proto=isMac?'doubao://chat':'doubao://chat';
+      const start=Date.now();
+      try{window.location.href=proto;}catch(_){}
+      /* 桌面端唤起需时通常 <1.5s；1.5s 后还在前台 → 协议失败 → 兜底网页版 */
+      setTimeout(()=>{
+        if(Date.now()-start<1600 && document.visibilityState!=='hidden'){
+          window.open('https://www.doubao.com/chat/','_blank');
+          toast('未检测到豆包桌面端，已打开网页版');
+        }else{
+          toast('已唤起豆包');
+        }
+      },700);
+      break;
+    }
     case 'open-todo':openTodoModal();break;
     case 'open-sync':openSyncPanel();break;
     case 'todo-toggle':{
@@ -788,9 +1019,9 @@ function renderHome(root){
         <span class="icon">🔍</span>
         <span class="label">应急备忘</span>
       </button>
-      <button class="quick-card" data-action="open-ai">
-        <span class="icon">🤖</span>
-        <span class="label">AI助手 / 话术</span>
+      <button class="quick-card" data-action="open-doubao" title="打开豆包 AI 助手">
+        <span class="icon">🪄</span>
+        <span class="label">豆包 AI</span>
       </button>
     </div>
 
@@ -942,12 +1173,12 @@ function refreshTodoModal(){
   list.sort((a,b)=>(a.done-b.done)||(a.deadline||'').localeCompare(b.deadline||''));
   if(!list.length){ml.innerHTML='<div class="empty"><div class="big">📝</div>暂无待办</div>';return;}
   ml.innerHTML=list.map(t=>`<div class="item ${t.done?'done':''}" data-id="${t.id}">
-    <div class="check ${t.done?'on':''}" data-act="toggle">${t.done?'✓':''}</div>
+    <div class="check ${t.done?'on':''}" data-action="toggle">${t.done?'✓':''}</div>
     <div class="it-main"><div class="it-title">${esc(t.title)}</div>
       <div class="it-meta"><span class="tag">${esc(t.tag)}</span><span>📅 ${fmt(t.deadline)}</span></div></div>
     <div class="it-actions">
-      <button class="btn sm" data-act="archive">归档</button>
-      <button class="btn sm danger" data-act="del">删除</button>
+      <button class="btn sm" data-action="archive">归档</button>
+      <button class="btn sm danger" data-action="del">删除</button>
     </div></div>`).join('');
 }
 function openTodoModal(){
@@ -995,9 +1226,9 @@ function renderPhMList(){
       <div style="margin-top:6px;font-size:13px;white-space:pre-wrap">${esc(p.content)}</div>
     </div>
     <div class="it-actions">
-      <button class="btn sm" data-act="fav">${p.fav?'取消':'★'}</button>
-      <button class="btn sm" data-act="copy">复制</button>
-      <button class="btn sm danger" data-act="ph-del">删除</button>
+      <button class="btn sm" data-action="fav">${p.fav?'取消':'★'}</button>
+      <button class="btn sm" data-action="copy">复制</button>
+      <button class="btn sm danger" data-action="ph-del">删除</button>
     </div></div>`).join('');
 }
 function openAiModal(){
@@ -1050,7 +1281,7 @@ function renderTodoList(filter){
   if(!list.length){box.innerHTML='<div class="empty"><div class="big">📝</div>暂无待办</div>';return;}
   box.innerHTML=list.map(t=>`
     <div class="item ${t.done?'done':''}" data-id="${t.id}">
-      <div class="check ${t.done?'on':''}" data-act="toggle">${t.done?'✓':''}</div>
+      <div class="check ${t.done?'on':''}" data-action="toggle">${t.done?'✓':''}</div>
       <div class="it-main">
         <div class="it-title">${esc(t.title)}</div>
         <div class="it-meta">
@@ -1059,8 +1290,8 @@ function renderTodoList(filter){
         </div>
       </div>
       <div class="it-actions">
-        ${t.archived?'':`<button class="btn sm" data-act="archive">归档</button>`}
-        <button class="btn sm danger" data-act="del">删除</button>
+        ${t.archived?'':`<button class="btn sm" data-action="archive">归档</button>`}
+        <button class="btn sm danger" data-action="del">删除</button>
       </div>
     </div>`).join('');
 }
@@ -1086,9 +1317,9 @@ function renderPhList(){
         <div style="margin-top:6px;font-size:13px;white-space:pre-wrap">${esc(p.content)}</div>
       </div>
       <div class="it-actions">
-        <button class="btn sm" data-act="fav">${p.fav?'取消收藏':'★收藏'}</button>
-        <button class="btn sm" data-act="copy">复制</button>
-        <button class="btn sm danger" data-act="ph-del">删除</button>
+        <button class="btn sm" data-action="fav">${p.fav?'取消收藏':'★收藏'}</button>
+        <button class="btn sm" data-action="copy">复制</button>
+        <button class="btn sm danger" data-action="ph-del">删除</button>
       </div>
     </div>`).join('');
 }
@@ -1205,7 +1436,7 @@ function renderEmContact(){
     <div class="tags">${c.tags.map(t=>`<span class="tag ${t==='紧急'?'urgent':'important'}">${t}</span>`).join('')}</div>
     <div class="nm">${esc(c.name)}</div><div class="ph">📞 ${esc(c.phone)}</div>
     <div class="lc">📍 ${esc(c.location||'—')}</div>${c.note?`<div class="lc">${esc(c.note)}</div>`:''}
-    <div class="row" style="margin-top:10px"><button class="btn sm danger" data-act="em-del-c" data-id="${c.id}">删除</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn sm danger" data-action="em-del-c" data-id="${c.id}">删除</button></div>
   </div>`).join('')}</div>`;
 }
 function renderEmFlow(){
@@ -1213,31 +1444,149 @@ function renderEmFlow(){
   box.innerHTML=`<div class="row" style="margin-bottom:14px"><button class="btn primary" data-action="em-add-flow">+ 新增流程</button></div>
   <div class="list">${DB.emergency.flows.map(f=>`<div class="item"><div class="it-main"><div class="it-title">${esc(f.title)}</div>
     <div class="it-meta"><ol style="margin:4px 0 0 18px">${f.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></div></div>
-    <div class="it-actions"><button class="btn sm danger" data-act="em-del-f" data-id="${f.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无流程</div>'}</div>`;
+    <div class="it-actions"><button class="btn sm danger" data-action="em-del-f" data-id="${f.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无流程</div>'}</div>`;
 }
 function renderEmInfo(){
   const box=$('#emInfo');if(!box)return;
   box.innerHTML=`<div class="row" style="margin-bottom:14px"><button class="btn primary" data-action="em-add-info">+ 新增信息</button></div>
   <div class="list">${DB.emergency.info.map(i=>`<div class="item"><div class="it-main"><div class="it-title">${esc(i.title)}</div><div style="margin-top:4px">${esc(i.content)}</div></div>
-    <div class="it-actions"><button class="btn sm danger" data-act="em-del-i" data-id="${i.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无信息</div>'}</div>`;
+    <div class="it-actions"><button class="btn sm danger" data-action="em-del-i" data-id="${i.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无信息</div>'}</div>`;
 }
 
 /* ============================================================
    学生档案
    ============================================================ */
+/* 当前选中的班级：'all' / '1' / '2'，学生档案与考勤共用 */
+let curCls='all';
+function stuCls(s){return s.cls||(DB.classes&&DB.classes[0]?DB.classes[0].id:'1');}
+function clsLabel(c){
+  if(c==='all')return '全部';
+  const f=(DB.classes||[]).find(x=>x.id===c);
+  return f?f.name:(c+'班');
+}
+function clsTabsHtml(id,includeAll){
+  id=id||'stClsTabs';
+  const arr=[...(includeAll?['all']:[]),...(DB.classes||[]).map(c=>c.id)];
+  return `<div class="tabs stu-cls-tabs" id="${id}">
+    ${arr.map(c=>`<button class="tab ${curCls===c?'active':''}" data-cls="${c}">${clsLabel(c)}</button>`).join('')}
+    <button class="tab cls-manage-btn" data-action="cls-manage" title="管理班级（新增 / 改名 / 删除）">⚙</button>
+  </div>`;
+}
+function bindClsTabs(id){
+  id=id||'stClsTabs';
+  const t=$('#'+id);if(!t||t.dataset.bound)return;
+  t.dataset.bound='1';
+  t.addEventListener('click',e=>{
+    const b=e.target.closest('[data-cls]');if(!b)return;
+    curCls=b.dataset.cls;
+    $$('#'+id+' .tab').forEach(x=>x.classList.toggle('active',x.dataset.cls===curCls));
+    if(typeof renderStList==='function'&&$('#stList'))renderStList();
+    if(typeof loadAtList==='function'&&$('#atList'))loadAtList();
+    if(typeof renderExList==='function'&&$('#exList')){const bx=$('#boardOut');if(bx){bx.innerHTML='';delete bx.dataset.examId;}renderExList();}
+    if(typeof renderSeatGrid==='function'&&$('#seatGrid')){renderSeatGrid();renderSeatPool();}
+    if(typeof renderSeatOverlays==='function'&&$('#seatGrid'))renderSeatOverlays();
+  });
+}
+/* 班级是否存在（防止指向已删除班级的 curCls 出错） */
+function clsExists(c){return (DB.classes||[]).some(x=>x.id===c);}
+/* 默认班级 id（兜底用第一个班） */
+function defaultClsId(){return (DB.classes&&DB.classes[0])?DB.classes[0].id:'1';}
+/* 班级管理弹窗：新增 / 重命名 / 删除 */
+function openClassManager(){
+  const cls=DB.classes||[];
+  const html=`<div class="cls-mgr">
+    <div class="section-h">班级管理</div>
+    <div class="muted" style="font-size:13px;margin-bottom:10px">可新增、重命名、删除班级。删除时会把该班学生并入你选择的另一个班，并清理座位、成绩、考勤中该班的数据。</div>
+    <div id="clsMgrList">
+      ${cls.map(c=>`<div class="row" style="margin-bottom:8px" data-id="${c.id}">
+        <input class="cls-mgr-name" data-id="${c.id}" value="${esc(c.name)}" style="flex:1;min-width:140px">
+        ${cls.length>1?`<button class="btn sm danger" data-action="cls-del" data-id="${c.id}">删除</button>`:`<span class="muted" style="font-size:12px">（至少保留 1 个）</span>`}
+      </div>`).join('')}
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" data-action="cls-add">➕ 新增班级</button>
+      <span style="flex:1"></span>
+      <button class="btn" data-action="close-modal">关闭</button>
+    </div>
+  </div>`;
+  openModal(html);
+  const m=$('#modalBox');
+  m.querySelectorAll('.cls-mgr-name').forEach(inp=>{inp.oninput=()=>renameClass(inp.dataset.id,inp.value.trim());});
+  m.querySelectorAll('[data-action="cls-del"]').forEach(b=>{b.onclick=()=>deleteClass(b.dataset.id);});
+  const addBtn=m.querySelector('[data-action="cls-add"]');
+  if(addBtn)addBtn.onclick=()=>{addClass();if(typeof CUR!=='undefined'&&CUR)showView(CUR);openClassManager();};
+}
+function addClass(){
+  let max=0;(DB.classes||[]).forEach(c=>{const n=parseInt(c.id,10);if(!isNaN(n)&&n>max)max=n;});
+  let newId=String(max+1);
+  if((DB.classes||[]).some(c=>c.id===newId))newId='c'+Date.now().toString(36);
+  DB.classes=DB.classes||[];
+  DB.classes.push({id:newId,name:newId+'班'});
+  if(!DB.seats.layouts)DB.seats.layouts={};
+  DB.seats.layouts[newId]={};
+  save();toast('已新增班级：'+newId+'班');
+}
+function renameClass(id,name){
+  if(!name)return;
+  const c=(DB.classes||[]).find(x=>x.id===id);
+  if(c){c.name=name;save();}
+}
+function deleteClass(id){
+  if((DB.classes||[]).length<=1){toast('至少保留 1 个班级');return;}
+  const others=(DB.classes||[]).filter(c=>c.id!==id);
+  if(!others.length)return;
+  const stuCnt=DB.students.filter(s=>stuCls(s)===id && !s.archived).length;
+  const html=`<div class="cls-del">
+    <div class="section-h">删除班级「${esc(clsLabel(id))}」</div>
+    <div class="muted" style="font-size:13px;margin:8px 0">该班共 <b>${stuCnt}</b> 名在读学生。删除后，该班的座位、成绩、考勤数据会被清除。请选择把学生并入哪个班：</div>
+    <div class="row"><select id="clsDelTarget" style="min-width:160px">${others.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn sm" data-action="close-modal">取消</button>
+      <span style="flex:1"></span>
+      <button class="btn sm danger" data-action="cls-del-confirm" data-id="${id}">确认删除并并入</button>
+    </div>
+  </div>`;
+  openModal(html);
+  const btn=$('#modalBox').querySelector('[data-action="cls-del-confirm"]');
+  if(btn)btn.onclick=()=>{
+    const target=$('#clsDelTarget').value;
+    doDeleteClass(id,target);
+    if(typeof CUR!=='undefined'&&CUR)showView(CUR);
+    closeModal();openClassManager();
+  };
+}
+function doDeleteClass(id,target){
+  DB.students.forEach(s=>{if(stuCls(s)===id)s.cls=target;});
+  if(DB.seats.layouts && DB.seats.layouts[id])delete DB.seats.layouts[id];
+  DB.attendance=DB.attendance.filter(a=>a.cls!==id);
+  DB.exams=DB.exams.filter(e=>(e.cls||'1')!==id);
+  DB.classes=DB.classes.filter(c=>c.id!==id);
+  if(curCls===id)curCls=target;
+  save();toast('已删除班级，学生已并入'+clsLabel(target));
+}
 function renderStudents(root){
   root.innerHTML=`
   <div class="page-title">学生档案</div>
   <div class="page-sub">管理班级学生基本信息，支持手动新增 / 编辑 / 归档，也可批量导入</div>
   <div class="card">
+    ${clsTabsHtml()}
     <div class="row" style="margin-bottom:12px">
       <input id="stSearch" placeholder="搜索姓名 / 学号…" style="flex:1;min-width:200px">
       <button class="btn primary" data-action="st-add">+ 新增学生</button>
       <button class="btn" data-action="st-import">⬆ 批量导入</button>
+      <button class="btn ghost" data-action="st-tpl" title="下载空白模板，按格式填好上传即可导入">📋 下载导入模板</button>
       <button class="btn" data-action="st-import-sample">填充示例</button>
+      <button class="btn danger" data-action="st-clear-all" title="清空当前班级（或全部班级）所有学生及相关数据">🗑 一键清除人员</button>
+    </div>
+    <div class="st-batch hidden" id="stBatchBar">
+      <span id="stSelCount">已选 0 个</span>
+      <button class="btn sm" data-action="st-sel-all">全选</button>
+      <button class="btn sm" data-action="st-sel-none">取消</button>
+      <button class="btn sm danger" data-action="st-del-multi">🗑 批量删除</button>
     </div>
     <div class="list" id="stList"></div>
   </div>`;
+  bindClsTabs('stClsTabs');
   renderStList();
 }
 
@@ -1245,8 +1594,19 @@ function renderStudents(root){
    学生批量导入（手动 / Excel / 图片OCR / Word / 文本）
    ============================================================ */
 let stImportRows=[];
+let stSel=new Set();              // 学生档案：多选删除的已选 id
+function updateStBatchBar(){
+  const bar=$('#stBatchBar');if(!bar)return;
+  $('#stSelCount').textContent='已选 '+stSel.size+' 个';
+  bar.classList.toggle('hidden', stSel.size===0);
+}
 function openStImport(){
+  const defCls=(curCls!=='all'?curCls:'1');
   openModal(`<h3>批量导入学生</h3>
+    <div class="row" style="margin-bottom:10px;align-items:flex-end">
+      <div class="field" style="flex:0 0 auto"><label>导入到</label><select id="impCls"><option value="1" ${defCls==='1'?'selected':''}>1班</option><option value="2" ${defCls==='2'?'selected':''}>2班</option></select></div>
+      <span class="muted" style="font-size:12px;padding-bottom:8px">本次导入的学生将归入所选班级</span>
+    </div>
     <div class="tabs">
       <button class="tab active" data-itab="excel">Excel/CSV</button>
       <button class="tab" data-itab="ocr">图片识别</button>
@@ -1254,7 +1614,10 @@ function openStImport(){
       <button class="tab" data-itab="text">文本粘贴</button>
     </div>
     <div class="tab-content active" data-itc="excel">
-      <p class="imp-note">支持 .xlsx / .xls / .csv。首行可为表头（姓名、学号、性别、电话、家长），无表头时按列顺序识别。</p>
+      <div class="row" style="margin-bottom:8px">
+        <p class="imp-note" style="flex:1;margin:0">支持 .xlsx / .xls / .csv。首行可为表头（姓名、学号、性别、电话、家长），无表头时按列顺序识别。</p>
+        <button class="btn sm" data-action="st-tpl" title="下载空白模板">📋 下载模板</button>
+      </div>
       <input type="file" id="impExcel" accept=".xlsx,.xls,.csv">
     </div>
     <div class="tab-content" data-itc="ocr">
@@ -1325,9 +1688,10 @@ function renderImpPreview(){
 function confirmImport(replace){
   const valid=stImportRows.filter(r=>r.name);
   if(!valid.length){toast('没有可导入的学生');return;}
+  const impCls=($('#impCls')?.value||'1');
   if(replace)DB.students=DB.students.filter(s=>s.archived);
   const n=DB.students.length;
-  valid.forEach(r=>DB.students.push({id:uid(),name:r.name,no:r.no||'',gender:r.gender||'',phone:r.phone||'',parent:r.parent||'',notes:r.notes||'',archived:false}));
+  valid.forEach(r=>DB.students.push({id:uid(),name:r.name,no:r.no||'',cls:impCls,gender:r.gender||'',phone:r.phone||'',parent:r.parent||'',notes:r.notes||'',archived:false}));
   save();closeModal();renderStList();if(typeof renderSeatPool==='function')renderSeatPool();toast('已导入 '+valid.length+' 名学生');
 }
 async function onExcel(file){
@@ -1342,6 +1706,25 @@ async function onExcel(file){
     stImportRows=xlsxToStudents(rows);
     renderImpPreview();
   }catch(err){wrap.innerHTML='<div class="imp-note" style="color:var(--danger)">解析失败：'+(err.message||err)+'（请确认文件为 .xlsx/.xls/.csv，或联网后重试）</div>';}
+}
+
+/* 下载学生导入模板（表头 + 一行示例 + 多个空行） */
+async function downloadStudentTemplate(){
+  try{
+    if(typeof XLSX==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    const header=['姓名*','学号','性别','电话','家长'];
+    const sample=['张三','2024001','男','13800000000','张爸爸'];
+    /* 30 行空白占位，方便老师直接填 */
+    const blank=Array(30).fill(['','','','','']);
+    const ws=XLSX.utils.aoa_to_sheet([header,sample,...blank]);
+    /* 给表头和示例行加上颜色方便区分 */
+    if(ws['A1'])ws['A1'].s={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'2E9E5B'}}};
+    if(ws['A2'])ws['A2'].s={fill:{fgColor:{rgb:'F0F4F9'}},note:'示例行，可删除'};
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'学生');
+    XLSX.writeFile(wb,`学生信息导入模板-${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast('模板已下载，按格式填好上传即可');
+  }catch(err){toast('下载失败：'+(err.message||err));}
 }
 function xlsxToStudents(rows){
   if(!rows.length)return [];
@@ -1386,39 +1769,125 @@ function renderStList(){
   const box=$('#stList');if(!box)return;
   const q=($('#stSearch')?.value||'').toLowerCase();
   let list=DB.students.filter(s=>!s.archived);
+  if(curCls!=='all')list=list.filter(s=>stuCls(s)===curCls);
   if(q)list=list.filter(s=>(s.name+s.no).toLowerCase().includes(q));
-  if(!list.length){box.innerHTML='<div class="empty"><div class="big">🧑‍🎓</div>还没有学生，点击「新增学生」或「填充示例」</div>';return;}
-  box.innerHTML=list.map(s=>`<div class="item">
-    <div class="check on" style="cursor:default;background:var(--chip);border-color:transparent;color:var(--text);font-weight:700">${esc((s.name||'?').slice(0,1))}</div>
-    <div class="it-main">
-      <div class="it-title">${esc(s.name)} <span class="muted" style="font-weight:400;font-size:12px">${esc(s.no||'')} · ${esc(s.gender||'')}</span></div>
-      <div class="it-meta">
-        ${s.phone?`<span>📞 ${esc(s.phone)}</span>`:''}
-        ${s.parent?`<span>家长：${esc(s.parent)}</span>`:''}
-        ${s.notes?`<span>📝 ${esc(s.notes)}</span>`:''}
-      </div>
-    </div>
-    <div class="it-actions">
-      <button class="btn sm" data-act="st-edit" data-id="${s.id}">编辑</button>
-      <button class="btn sm" data-act="st-archive" data-id="${s.id}">归档</button>
-      <button class="btn sm danger" data-act="st-del" data-id="${s.id}">删除</button>
-    </div></div>`).join('');
+  updateStBatchBar();
+  if(!list.length){box.innerHTML=`<div class="empty"><div class="big">🧑‍🎓</div>${curCls==='all'?'还没有学生，点击「新增学生」或「填充示例」':'「'+clsLabel(curCls)+'」还没有学生，点击「+ 新增学生」加入'}</div>`;return;}
+  const cells=[];
+  for(let i=0;i<64;i++){
+    const s=list[i];
+    if(s){
+      const meta=[s.no,s.gender].filter(Boolean).join(' · ');
+      const subLine = meta ? `<div class="sub">${esc(meta)}</div>` : '';
+      cells.push(`<div class="stu-cell" data-action="st-actmenu" data-id="${s.id}" title="${esc(s.name)}${meta?' · '+esc(meta):''}">
+        <div class="nm">${esc(s.name||'')}</div>
+        ${subLine}
+      </div>`);
+    }else{
+      cells.push(`<div class="stu-cell empty">＋</div>`);
+    }
+  }
+  box.innerHTML=`<div class="stu-grid">${cells.join('')}</div>
+    <div class="muted" style="text-align:center;margin-top:8px;font-size:12px">${clsLabel(curCls)}共 ${list.length} 人（最多 64），点击姓名查看编辑 / 归档 / 删除${curCls==='all'&&list.length>64?'<br>⚠️ 全部模式仅显示前 64 人，请切换到具体班级查看完整名单':''}</div>`;
+}
+/* 学生档案：cell 弹出操作菜单（编辑 / 归档 / 删除） */
+function openStuMenu(btn){
+  closeStuMenu();
+  const id=btn.dataset.id;
+  const s=DB.students.find(x=>x.id===id);if(!s)return;
+  const menu=document.createElement('div');menu.className='stu-menu';menu.id='stuMenu';
+  menu.innerHTML=`<button data-action="st-edit" data-id="${id}">✏️ 编辑</button>
+    <button data-action="st-archive" data-id="${id}">📦 归档</button>
+    <button class="danger" data-action="st-del" data-id="${id}">🗑 删除</button>`;
+  document.body.appendChild(menu);
+  const r=btn.getBoundingClientRect();
+  const mw=140,mh=120;
+  let left=r.right+8, top=r.top;
+  if(left+mw>window.innerWidth-8)left=r.left-mw-8;
+  if(top+mh>window.innerHeight-8)top=window.innerHeight-mh-8;
+  if(top<8)top=8;
+  menu.style.left=left+'px';menu.style.top=top+'px';
+}
+function closeStuMenu(){const m=$('#stuMenu');if(m)m.remove();}
+
+/* 当前班级的座位布局（按班独立存储，避免两班互相覆盖） */
+function curSeatLayout(){
+  if(!DB.seats.layouts){DB.seats.layouts={};(DB.classes||[]).forEach(c=>DB.seats.layouts[c.id]={});}
+  if(!DB.seats.layouts[curCls])DB.seats.layouts[curCls]={};
+  const lay=DB.seats.layouts[curCls];
+  // 老数据：corridor/podium 覆盖层全部丢弃（走廊→网格列、讲台→网格行）
+  if(lay.overlays){
+    if(lay.overlays.corridor)delete lay.overlays.corridor;
+    if(lay.overlays.podium)delete lay.overlays.podium;
+    if(Array.isArray(lay.overlays.list))lay.overlays.list=lay.overlays.list.filter(o=>o.type!=='corridor'&&o.type!=='podium');
+  }
+  // 走廊（网格列）默认：正中间分开
+  if(!DB.seats.corridors || !Array.isArray(DB.seats.corridors)){
+    DB.seats.corridors = DB.seats.cols>=2 ? [Math.floor(DB.seats.cols/2)-1] : [];
+  }
+  DB.seats.corridors = DB.seats.corridors.filter(p=>Number.isInteger(p) && p>=0 && p < DB.seats.cols-1);
+  // 讲台（网格行）默认：教室最前方（-1 表示第一行之前）
+  if(!DB.seats.podiums || !Array.isArray(DB.seats.podiums)){
+    DB.seats.podiums = DB.seats.rows>=1 ? [-1] : [];
+  }
+  DB.seats.podiums = DB.seats.podiums.filter(p=>Number.isInteger(p) && p>=-1 && p<=DB.seats.rows-1);
+  return lay;
+}
+/* 像 Excel 插入一列：在座位网格中追加一条纵向走廊（全局，不占座位） */
+function addCorridor(){
+  if(!DB.seats.corridors)DB.seats.corridors=[];
+  const C=DB.seats.cols;
+  if(C<2)return;
+  let pos=Math.floor(C/2)-1; // 优先从中间分开
+  if(DB.seats.corridors.includes(pos)){
+    let placed=false;
+    for(let d=1;d<C && !placed;d++){
+      if(!DB.seats.corridors.includes(pos-d) && pos-d>=0){pos=pos-d;placed=true;}
+      else if(!DB.seats.corridors.includes(pos+d) && pos+d<=C-2){pos=pos+d;placed=true;}
+    }
+    if(!placed)return;
+  }
+  DB.seats.corridors.push(pos);
+  DB.seats.corridors.sort((a,b)=>a-b);
+}
+/* 像 Excel 插入一行：在座位网格中追加一条横向讲台行（全局，不占座位） */
+function addPodium(){
+  if(!DB.seats.podiums)DB.seats.podiums=[];
+  const R=DB.seats.rows;
+  if(R<1)return;
+  let pos=-1; // 默认教室最前方
+  if(DB.seats.podiums.includes(pos)){
+    pos=Math.floor(R/2)-1;
+    let placed=false;
+    for(let d=1;d<R+2 && !placed;d++){
+      if(!DB.seats.podiums.includes(pos-d) && pos-d>=-1 && pos-d<=R-1){pos=pos-d;placed=true;}
+      else if(!DB.seats.podiums.includes(pos+d) && pos+d>=-1 && pos+d<=R-1){pos=pos+d;placed=true;}
+    }
+    if(!placed)return;
+  }
+  DB.seats.podiums.push(pos);
+  DB.seats.podiums.sort((a,b)=>a-b);
 }
 
 /* ============================================================
    座位管理（8×8，可拖拽）
    ============================================================ */
 function renderSeats(root){
+  if(curCls==='all'||!clsExists(curCls))curCls=defaultClsId();
   root.innerHTML=`
   <div class="page-title">座位管理</div>
-  <div class="page-sub">默认 8 行 8 列；<b>拖动</b>座位上的学生可互换位置，也可从未分配名单拖入空位，拖回名单即清空</div>
+  <div class="page-sub">默认 8 行 8 列；<b>拖动</b>座位上的学生可互换位置，也可从未分配名单拖入空位，拖回名单即清空。「添加走廊」像 Excel 插入一列（纵向通道），「添加讲台」像 Excel 插入一行（横向讲台），二者都<b>不减少</b> 8×8 的座位数</div>
   <div class="card">
-    <div class="row" style="margin-bottom:14px">
+    ${clsTabsHtml('seatClsTabs', false)}
+    <div class="row" style="margin-bottom:14px;flex-wrap:wrap;gap:6px">
       <span>行数</span><input id="seatR" type="number" value="${DB.seats.rows}" style="width:64px">
       <span>列数</span><input id="seatC" type="number" value="${DB.seats.cols}" style="width:64px">
       <button class="btn" data-action="seat-apply">应用行列</button>
       <button class="btn" data-action="seat-auto">自动排座</button>
       <button class="btn danger" data-action="seat-clear">清空</button>
+      <span class="muted" style="margin-left:auto">覆盖元素：</span>
+      <button class="btn sm" data-action="seat-add-corridor" title="像 Excel 插入一列：在座位间加一条纵向通道，不影响 8×8 座位数量">➕ 添加走廊</button>
+      <button class="btn sm" data-action="seat-add-podium" title="像 Excel 插入一行：在座位间加一条横向讲台，不影响 8×8 座位数量">➕ 添加讲台</button>
     </div>
     <div class="seat-layout">
       <div class="seat-pool">
@@ -1426,35 +1895,91 @@ function renderSeats(root){
         <div class="seat-pool-list" id="seatPool"></div>
         <div class="muted" style="font-size:12px;margin-top:6px">把名字拖到右侧座位即可入座</div>
       </div>
-      <div class="seat-grid" id="seatGrid" style="grid-template-columns:34px repeat(${DB.seats.cols},1fr)"></div>
+      <div class="seat-grid" id="seatGrid" style="grid-template-columns:34px repeat(${DB.seats.cols},1fr);grid-template-rows:28px repeat(${DB.seats.rows},1fr)"></div>
     </div>
   </div>`;
   renderSeatGrid();
   renderSeatPool();
+  bindClsTabs('seatClsTabs');
+  bindSeatOverlayDrag();
 }
 function renderSeatPool(){
   const box=$('#seatPool');if(!box)return;
   box.setAttribute('ondragover','seatDragOver(event)');
   box.setAttribute('ondrop','seatUnassign(event,this)');
-  const assigned=new Set(Object.values(DB.seats.layout));
-  const pool=DB.students.filter(s=>!s.archived && !assigned.has(s.id));
+  const assigned=new Set(Object.values(curSeatLayout()));
+  const pool=DB.students.filter(s=>!s.archived && stuCls(s)===curCls && !assigned.has(s.id));
   $('#poolCount').textContent='('+pool.length+')';
   if(!pool.length){box.innerHTML='<div class="muted" style="font-size:12px">全部已入座 🎉</div>';return;}
-  box.innerHTML=pool.map(s=>`<div class="pool-item" draggable="true" data-stuid="${s.id}" ondragstart="seatDragStart(event,this)">${esc(s.name)}</div>`).join('');
+  box.innerHTML=pool.map(s=>`<div class="pool-item" draggable="true" data-stuid="${s.id}" ondragstart="seatDragStart(event,this)" title="${esc(s.name)}">${esc(s.name)}</div>`).join('');
 }
 function renderSeatGrid(){
   const g=$('#seatGrid');if(!g)return;
-  const active=DB.students.filter(s=>!s.archived);
-  let html='';
+  const active=DB.students.filter(s=>!s.archived && stuCls(s)===curCls);
+  const layout=curSeatLayout();
+  const cors=DB.seats.corridors||[];
+  const pods=DB.seats.podiums||[];
+  // 表头行：列号 + 走廊列头（点击删除）
+  let html='<div class="seat corner"></div>';
+  for(let c=0;c<DB.seats.cols;c++){
+    html+=`<div class="seat rowlabel">${c+1}</div>`;
+    if(cors.includes(c))html+=`<div class="seat corridor-h" data-action="seat-del-corridor" data-pos="${c}" title="点击删除此走廊">✕</div>`;
+  }
+  // 数据行（讲台行穿插其间）
   for(let r=0;r<DB.seats.rows;r++){
+    if(pods.includes(r-1))html+=`<div class="seat podium-cell" data-action="seat-del-podium" data-pos="${r-1}" style="grid-column:1/-1" title="点击删除此讲台行">讲台</div>`;
     html+=`<div class="seat rowlabel">${r+1}</div>`;
     for(let c=0;c<DB.seats.cols;c++){
-      const key=r+'-'+c;const sid=DB.seats.layout[key];const st=active.find(s=>s.id===sid);
+      const key=r+'-'+c;const sid=layout[key];const st=active.find(s=>s.id===sid);
       html+=`<div class="seat ${st?'filled':''}" data-key="${key}" ${st?`draggable="true" data-sid="${sid}" ondragstart="seatDragStart(event,this)"`:''}
         ondragover="seatDragOver(event)" ondrop="seatDrop(event,this)">${st?esc(st.name):''}</div>`;
+      if(cors.includes(c))html+=`<div class="seat corridor-cell"></div>`;
     }
   }
+  if(pods.includes(DB.seats.rows-1))html+=`<div class="seat podium-cell" data-action="seat-del-podium" data-pos="${DB.seats.rows-1}" style="grid-column:1/-1" title="点击删除此讲台行">讲台</div>`;
   g.innerHTML=html;
+  // 动态列模板：行号列 + 每个「学生列(1fr)」+ 其后的「走廊列(固定宽)」
+  let tmpl='34px';
+  for(let c=0;c<DB.seats.cols;c++){tmpl+=' 1fr';if(cors.includes(c))tmpl+=' 34px';}
+  g.style.gridTemplateColumns=tmpl;
+  // 动态行模板：表头(28px) + [讲台行(34px)?] + 学生行(1fr)
+  let rt='28px';
+  for(let r=0;r<DB.seats.rows;r++){
+    if(pods.includes(r-1))rt+=' 34px';
+    rt+=' 1fr';
+  }
+  if(pods.includes(DB.seats.rows-1))rt+=' 34px';
+  g.style.gridTemplateRows=rt;
+  renderSeatOverlays();
+  applyBlockedOverlay(g);
+}
+/* 走廊/讲台覆盖的座位格：中心点落入覆盖矩形则视为被挡，标记 .blocked、清掉里面的学生映射、禁止 drop */
+function applyBlockedOverlay(g){
+  if(!g)g=$('#seatGrid');if(!g)return;
+  const overlays=g.querySelectorAll('.seat-overlay');
+  if(!overlays.length)return;
+  const seats=g.querySelectorAll('.seat[data-key]');
+  const layout=curSeatLayout();
+  let changed=false;
+  seats.forEach(seat=>{
+    const sr=seat.getBoundingClientRect();
+    let hit=false;
+    overlays.forEach(ov=>{
+      const r=ov.getBoundingClientRect();
+      const cx=sr.left+sr.width/2;
+      const cy=sr.top+sr.height/2;
+      if(cx>=r.left && cx<=r.right && cy>=r.top && cy<=r.bottom)hit=true;
+    });
+    if(hit){
+      seat.classList.add('blocked');
+      seat.removeAttribute('draggable');
+      seat.removeAttribute('data-sid');
+      seat.textContent='';
+      const key=seat.dataset.key;
+      if(layout[key]){delete layout[key];changed=true;}
+    }
+  });
+  if(changed)save();
 }
 let seatDragSrc=null;
 function seatDragStart(e,el){
@@ -1466,104 +1991,141 @@ function seatDragStart(e,el){
 function seatDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';}
 function seatDrop(e,el){
   e.preventDefault();if(!seatDragSrc)return;
+  if(el.classList.contains('blocked')){seatDragSrc=null;return;}
   const key=el.dataset.key;
+  const layout=curSeatLayout();
   if(seatDragSrc.type==='pool'){
-    if(DB.seats.layout[key]){/* 占位者自动回池 */} DB.seats.layout[key]=seatDragSrc.sid;
+    if(layout[key]){/* 占位者自动回池 */} layout[key]=seatDragSrc.sid;
   }else{
-    const from=seatDragSrc.key;const tmp=DB.seats.layout[key];
-    DB.seats.layout[key]=DB.seats.layout[from];
-    if(tmp)DB.seats.layout[from]=tmp;else delete DB.seats.layout[from];
+    const from=seatDragSrc.key;const tmp=layout[key];
+    layout[key]=layout[from];
+    if(tmp)layout[from]=tmp;else delete layout[from];
   }
   seatDragSrc=null;save();renderSeatGrid();renderSeatPool();
 }
 function seatUnassign(e,el){
-  e.preventDefault();if(seatDragSrc&&seatDragSrc.type==='seat'){delete DB.seats.layout[seatDragSrc.key];seatDragSrc=null;save();renderSeatGrid();renderSeatPool();}
+  e.preventDefault();if(seatDragSrc&&seatDragSrc.type==='seat'){delete curSeatLayout()[seatDragSrc.key];seatDragSrc=null;save();renderSeatGrid();renderSeatPool();}
 }
 
-/* ============================================================
-   值日排班
-   ============================================================ */
-function renderDuty(root){
-  const days=['周一','周二','周三','周四','周五'];
-  root.innerHTML=`
-  <div class="page-title">值日排班</div>
-  <div class="page-sub">为每天安排值日小组，可自定义小组名称</div>
-  <div class="card">
-    <div class="row" style="margin-bottom:14px">
-      <span>小组设置：</span>
-      <input id="dutyGroups" value="${esc(DB.duty.groups.join(','))}" style="flex:1;min-width:240px" placeholder="用逗号分隔，如 第一组,第二组">
-      <button class="btn primary" data-action="duty-save-groups">保存小组</button>
-    </div>
-    <div class="row" style="flex-direction:column;align-items:stretch;gap:10px">
-      ${days.map(d=>`<div class="row"><span style="width:48px;font-weight:700">${d}</span>
-        <select data-duty-day="${d}" style="flex:1;max-width:300px">${DB.duty.groups.map(g=>`<option ${DB.duty.schedule[d]===g?'selected':''}>${esc(g)}</option>`).join('')}</select>
-      </div>`).join('')}
-    </div>
-  </div>`;
+/* 走廊 / 讲台（可多个）：list 模型，按班级独立保存到 DB.seats.layouts[cls].overlays.list */
+function defaultSeatOverlayPos(kind){
+  if(kind==='corridor')return {left:45.5,top:0,width:9,height:100}; // 竖向中部通道
+  if(kind==='podium')return {left:30,top:0,width:40,height:11};    // 顶部讲台
+  return {left:0,top:0,width:30,height:15};
 }
-
-/* ============================================================
-   家校联系
-   ============================================================ */
-function renderContact(root){
-  root.innerHTML=`
-  <div class="page-title">家校联系</div>
-  <div class="page-sub">记录每次沟通，并可调用话术库快速发送</div>
-  <div class="tabs">
-    <button class="tab active" data-tab="records">联系记录</button>
-    <button class="tab" data-tab="phrases">话术库</button>
-  </div>
-  <div class="tab-content active" data-tc="records">
-    <div class="card">
-      <div class="row" style="margin-bottom:12px">
-        <input id="ctSearch" placeholder="搜索学生 / 内容…" style="flex:1;min-width:200px">
-        <button class="btn primary" data-action="ct-add">+ 新增记录</button>
-      </div>
-      <div class="list" id="ctList"></div>
-    </div>
-  </div>
-  <div class="tab-content" data-tc="phrases">
-    <div class="card">
-      <div class="row" style="margin-bottom:10px">
-        <input id="ctPhSearch" placeholder="搜索话术…" style="flex:1;min-width:200px">
-        <button class="btn" data-action="ct-ph-fav">★ 仅收藏</button>
-        <button class="btn primary" data-action="ph-add">+ 新增话术</button>
-      </div>
-      <div class="row" id="ctPhCats" style="margin-bottom:12px"></div>
-      <div class="list" id="ctPhList"></div>
-    </div>
-  </div>`;
-  bindTabs(root);
-  renderCtList();
-  $('#ctPhCats').innerHTML=DB.phraseCats.map(c=>`<span class="chip ${c===phCat?'active':''}" data-cat="${esc(c)}">${esc(c)}</span>`).join('');
-  renderCtPhList();
+function overlaysList(){return curSeatLayout().overlays.list;}
+function addOverlay(type){
+  const lay=curSeatLayout();
+  const same=lay.overlays.list.filter(o=>o.type===type);
+  const d=defaultSeatOverlayPos(type);
+  let left=d.left,top=d.top;
+  if(type==='corridor'){
+    const stride=11; left=(same.length*stride)%Math.max(11,100-d.width);
+  }else if(type==='podium'){
+    const stride=13; top=(same.length*stride)%Math.max(13,100-d.height);
+  }
+  lay.overlays.list.push({
+    id:(type==='corridor'?'co':'po')+Date.now().toString(36)+Math.floor(Math.random()*9999),
+    type,label:type==='corridor'?'走廊':'讲台',
+    left,top,width:d.width,height:d.height,
+  });
+  save();renderSeatGrid();
 }
-function renderCtList(){
-  const box=$('#ctList');if(!box)return;
-  const q=($('#ctSearch')?.value||'').toLowerCase();
-  let list=DB.contacts.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  if(q)list=list.filter(c=>(c.student+c.content+c.type).toLowerCase().includes(q));
-  if(!list.length){box.innerHTML='<div class="empty"><div class="big">📞</div>暂无联系记录</div>';return;}
-  box.innerHTML=list.map(c=>`<div class="item"><div class="it-main">
-    <div class="it-title">${esc(c.student)} <span class="tag blue">${esc(c.type)}</span> <span class="muted">${fmt(c.date)}</span></div>
-    <div style="margin-top:4px">${esc(c.content)}</div>
-    ${c.followup?`<div class="it-meta"><span class="tag warn">跟进：${esc(c.followup)}</span></div>`:''}
-  </div><div class="it-actions"><button class="btn sm danger" data-act="ct-del" data-id="${c.id}">删除</button></div></div>`).join('');
+function removeOverlay(id){
+  const lay=curSeatLayout();
+  lay.overlays.list=lay.overlays.list.filter(o=>o.id!==id);
+  save();renderSeatGrid();
 }
-function renderCtPhList(){
-  const box=$('#ctPhList');if(!box)return;
-  let list=DB.phrases.slice().sort((a,b)=>(b.fav-a.fav));
-  if(phCat!=='全部')list=list.filter(p=>(p.tags||[]).includes(phCat));
-  if(phFavOnly)list=list.filter(p=>p.fav);
-  const q=($('#ctPhSearch')?.value||'').toLowerCase();
-  if(q)list=list.filter(p=>(p.title+p.content+(p.tags||[]).join('')).toLowerCase().includes(q));
-  if(!list.length){box.innerHTML='<div class="empty"><div class="big">💬</div>没有匹配的话术</div>';return;}
-  box.innerHTML=list.map(p=>`<div class="item"><div class="it-main">
-    <div class="it-title">${esc(p.title)} ${p.fav?'<span style="color:var(--warn)">★</span>':''}</div>
-    <div class="it-meta">${(p.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
-    <div style="margin-top:6px;font-size:13px;white-space:pre-wrap">${esc(p.content)}</div>
-  </div><div class="it-actions"><button class="btn sm" data-act="copy">复制</button><button class="btn sm danger" data-act="ph-del">删除</button></div></div>`).join('');
+function moveOverlay(id,left,top){
+  const lay=curSeatLayout();
+  const o=lay.overlays.list.find(x=>x.id===id);
+  if(o){o.left=left;o.top=top;save();}
 }
+function resetOverlay(id){
+  const lay=curSeatLayout();
+  const o=lay.overlays.list.find(x=>x.id===id);
+  if(o){const d=defaultSeatOverlayPos(o.type);Object.assign(o,d);o.label=o.type==='corridor'?'走廊':'讲台';save();renderSeatGrid();}
+}
+function renderSeatOverlays(){
+  const g=$('#seatGrid');if(!g)return;
+  // 清旧（避免层级累积）
+  g.querySelectorAll('.seat-overlay').forEach(e=>e.remove());
+  overlaysList().forEach(o=>{
+    if(o.type==='corridor'||o.type==='podium')return; // 走廊/讲台已改为网格列/行，不以覆盖层呈现
+    const el=document.createElement('div');
+    el.className='seat-overlay '+o.type;
+    el.dataset.id=o.id;
+    el.dataset.type=o.type;
+    el.style.left=o.left+'%';
+    el.style.top=o.top+'%';
+    el.style.width=o.width+'%';
+    el.style.height=o.height+'%';
+    el.textContent=o.label||(o.type==='corridor'?'走廊':'讲台');
+    el.title=(o.label||o.type)+'：拖动调整位置；双击复位；点击右上角 × 删除';
+    // ✕ 删除按钮
+    const x=document.createElement('span');
+    x.className='seat-overlay-x';
+    x.textContent='×';
+    x.title='删除此元素';
+    el.appendChild(x);
+    // 双击复位到默认位置（保留 type/label）
+    el.addEventListener('dblclick',e=>{
+      e.preventDefault();e.stopPropagation();
+      resetOverlay(o.id);
+    });
+    g.appendChild(el);
+  });
+}
+/* 走廊/讲台拖动：mousedown 启动、document 监听 mousemove/mouseup（仅注册一次） */
+let seatOvDrag=null;
+function bindSeatOverlayDrag(){
+  const g=$('#seatGrid');
+  if(!g)return;
+  // 座位格内拖入逻辑已用 ondragover，避免被覆盖层抢走——只响应纯鼠标（mousedown）
+  g.addEventListener('mousedown',e=>{
+    if(e.target.classList.contains('seat-overlay-x'))return; // ✕ 按钮不触发拖动
+    const ov=e.target.closest('.seat-overlay');
+    if(!ov)return;
+    e.preventDefault();e.stopPropagation();
+    const rect=g.getBoundingClientRect();
+    const lay=curSeatLayout();
+    const o=lay.overlays.list.find(x=>x.id===ov.dataset.id);
+    if(!o)return;
+    seatOvDrag={
+      el:ov,
+      id:o.id,
+      rect,
+      startX:e.clientX,
+      startY:e.clientY,
+      origLeft:o.left,
+      origTop:o.top,
+      w:o.width,
+      h:o.height,
+    };
+    ov.classList.add('dragging');
+    document.body.style.userSelect='none';
+  });
+}
+document.addEventListener('mousemove',e=>{
+  if(!seatOvDrag)return;
+  const rect=seatOvDrag.rect;
+  const dx=(e.clientX-seatOvDrag.startX)/rect.width*100;
+  const dy=(e.clientY-seatOvDrag.startY)/rect.height*100;
+  const nl=Math.max(0,Math.min(100-seatOvDrag.w,seatOvDrag.origLeft+dx));
+  const nt=Math.max(0,Math.min(100-seatOvDrag.h,seatOvDrag.origTop+dy));
+  seatOvDrag.el.style.left=nl+'%';
+  seatOvDrag.el.style.top=nt+'%';
+});
+document.addEventListener('mouseup',e=>{
+  if(!seatOvDrag)return;
+  const id=seatOvDrag.id;
+  const nl=parseFloat(seatOvDrag.el.style.left);
+  const nt=parseFloat(seatOvDrag.el.style.top);
+  moveOverlay(id,nl,nt);
+  seatOvDrag.el.classList.remove('dragging');
+  document.body.style.userSelect='';
+  seatOvDrag=null;
+});
 
 /* ============================================================
    知识点
@@ -1590,7 +2152,7 @@ function renderKList(){
       <div class="it-title">${esc(k.name)} ${k.source?`<span class="muted" style="font-weight:400;font-size:12px">来源：${esc(k.source)}</span>`:''}</div>
       <div class="bar-lbl"><span>掌握度</span><span>${k.mastery}%</span></div>
       <div class="bar ${cls}"><i style="width:${k.mastery}%"></i></div>
-    </div><div class="it-actions"><button class="btn sm danger" data-act="k-del" data-id="${k.id}">删除</button></div></div>`;
+    </div><div class="it-actions"><button class="btn sm danger" data-action="k-del" data-id="${k.id}">删除</button></div></div>`;
   }).join('');
 }
 
@@ -1624,54 +2186,132 @@ function renderSchedule(root){
   g.innerHTML=h;
 }
 
+/* 拼音首字母字典（覆盖 350+ 常用字，用于考勤按字母选人） */
+const PY=(()=>{
+  const m={};
+  /* 百家姓前 100+ 姓 + 250 名常用字，均为「汉字-拼音」对照，无声调 */
+  '赵zhao|钱qian|孙sun|李li|周zhou|吴wu|郑zheng|王wang|冯feng|陈chen|褚chu|卫wei|蒋jiang|沈shen|韩han|杨yang|朱zhu|秦qin|尤you|许xu|何he|吕lu|施shi|张zhang|孔kong|曹cao|严yan|华hua|金jin|魏wei|陶tao|姜jiang|戚qi|谢xie|邹zou|喻yu|柏bai|水shui|窦dou|章zhang|云yun|苏su|潘pan|葛ge|奚xi|范fan|彭peng|郎lang|鲁lu|韦wei|昌chang|马ma|苗miao|凤feng|花hua|方fang|俞yu|任ren|袁yuan|柳liu|鲍bao|史shi|唐tang|费fei|岑cen|薛xue|雷lei|贺he|倪ni|汤tang|滕teng|殷yin|罗luo|毕bi|郝hao|邬wu|安an|常chang|乐le|于yu|时shi|傅fu|皮pi|卞bian|齐qi|康kang|伍wu|余yu|元yuan|卜bu|顾gu|孟meng|平ping|黄huang|和he|穆mu|萧xiao|尹yin|姚yao|邵shao|湛zhan|汪wang|祁qi|毛mao|禹yu|狄di|米mi|贝bei|臧zang|计ji|伏fu|成cheng|戴dai|谈tan|宋song|茅mao|庞pang|熊xiong|纪ji|舒shu|屈qu|项xiang|祝zhu|董dong|梁liang|杜du|阮ruan|蓝lan|闵min|席xi|季ji|麻ma|强qiang|贾jia|路lu|娄lou|危wei|江jiang|童tong|颜yan|郭guo|梅mei|盛sheng|林lin|刁diao|钟zhong|徐xu|邱qiu|骆luo|高gao|夏xia|蔡cai|田tian|樊fan|胡hu|凌ling|霍huo|虞yu|万wan|支zhi|柯ke|管guan|卢lu|莫mo|经jing|房fang|裘qiu|缪miao|干gan|解xie|应ying|宗zong|丁ding|宣xuan|贲ben|邓deng|郁yu|单shan|杭hang|洪hong|包bao|诸zhu|左zuo|石shi|崔cui|吉ji|钮niu|龚gong|程cheng|邢xing|滑hua|裴pei|陆lu|荣rong|翁weng|刘liu|'.split('|').filter(Boolean).forEach(s=>{m[s[0]]=s.slice(1);});
+  '啊a|矮ai|爱ai|安an|岸an|八ba|白bai|百bai|柏bai|班ban|宝bao|北bei|贝bei|本ben|笔bi|边bian|变bian|表biao|别bie|博bo|伯bo|不bu|步bu|布bu|才cai|彩cai|昌chang|长chang|超chao|诚cheng|城cheng|楚chu|春chun|纯chun|翠cui|大da|丹dan|当dang|道dao|得de|德de|迪di|东dong|冬dong|都dou|端duan|朵duo|凡fan|方fang|飞fei|非fei|菲fei|风feng|福fu|刚gang|高gao|歌ge|各ge|公gong|光guang|广guang|贵gui|果guo|海hai|含han|好hao|号hao|合he|河he|红hong|虹hong|虎hu|护hu|花hua|华hua|画hua|怀huai|欢huan|环huan|黄huang|辉hui|会hui|惠hui|慧hui|嘉jia|佳jia|家jia|健jian|洁jie|金jin|锦jin|静jing|九jiu|酒jiu|菊ju|句ju|聚ju|军jun|俊jun|凯kai|开kai|科ke|可ke|克ke|空kong|苦ku|快kuai|宽kuan|昆kun|来lai|兰lan|蓝lan|朗lang|乐le|雷lei|冷leng|离li|力li|立li|丽li|利li|莲lian|良liang|亮liang|林lin|灵ling|流liu|龙long|楼lou|路lu|露lu|绿lu|洛luo|妈ma|麻ma|马ma|满man|慢man|曼man|毛mao|美mei|门men|梦meng|萌meng|面mian|民min|名ming|明ming|鸣ming|命ming|母mu|目mu|娜na|南nan|男nan|难nan|能neng|你ni|年nian|宁ning|牛niu|女nv|暖nuan|诺nuo|偶ou|怕pa|排pai|旁pang|鹏peng|皮pi|平ping|苹ping|评ping|七qi|奇qi|棋qi|千qian|前qian|强qiang|桥qiao|亲qin|青qing|清qing|晴qing|秋qiu|区qu|曲qu|取qu|去qu|全quan|泉quan|群qun|然ran|让rang|热re|人ren|认ren|任ren|日ri|荣rong|柔rou|如ru|瑞rui|若ruo|三san|森sen|沙sha|山shan|善shan|少shao|深shen|神shen|生sheng|声sheng|胜sheng|师shi|十shi|时shi|识shi|实shi|食shi|世shi|事shi|书shu|树shu|双shuang|水shui|顺shun|说shuo|思si|四si|松song|颂song|太tai|涛tao|腾teng|天tian|田tian|听ting|停ting|同tong|童tong|统tong|头tou|图tu|团tuan|推tui|腿tui|外wai|完wan|万wan|王wang|网wang|微wei|为wei|伟wei|文wen|问wen|握wo|无wu|五wu|武wu|物wu|西xi|希xi|息xi|习xi|喜xi|系xi|细xi|下xia|夏xia|先xian|显xian|现xian|相xiang|香xiang|响xiang|想xiang|向xiang|小xiao|校xiao|笑xiao|心xin|新xin|信xin|星xing|行xing|兴xing|醒xing|修xiu|秀xiu|雪xue|寻xun|牙ya|雅ya|亚ya|烟yan|言yan|岩yan|颜yan|眼yan|燕yan|阳yang|杨yang|洋yang|摇yao|遥yao|咬yao|要yao|也ye|业ye|叶ye|页ye|一yi|衣yi|依yi|仪yi|宜yi|移yi|已yi|以yi|义yi|易yi|意yi|亿yi|艺yi|忆yi|音yin|银yin|引yin|印yin|映ying|英ying|影ying|永yong|勇yong|用yong|优you|悠you|由you|友you|有you|又you|于yu|余yu|鱼yu|愉yu|与yu|宇yu|雨yu|玉yu|育yu|园yuan|原yuan|源yuan|远yuan|愿yuan|月yue|越yue|悦yue|云yun|允yun|运yun|在zai|早zao|怎zen|展zhan|战zhan|张zhang|找zhao|照zhao|者zhe|这zhe|真zhen|镇zhen|正zheng|之zhi|知zhi|直zhi|止zhi|只zhi|纸zhi|指zhi|志zhi|制zhi|中zhong|忠zhong|终zhong|种zhong|重zhong|州zhou|周zhou|主zhu|住zhu|注zhu|祝zhu|转zhuan|装zhuang|壮zhuang|追zhui|准zhun|着zhuo|子zi|自zi|字zi|总zong|走zou|足zu|组zu|最zui|做zuo|座zuo'.split('|').filter(Boolean).forEach(s=>{m[s[0]]=s.slice(1);});
+  return m;
+})();
+/* 把姓名转为小写拼音连接串（如「张文」→「zhangwen」），用于按字母检索 */
+function namePinyin(name){
+  if(!name)return'';
+  let s='';
+  for(const ch of name){
+    if(PY[ch]){s+=PY[ch];}
+    else if(/[a-zA-Z]/.test(ch)){s+=ch.toLowerCase();}
+  }
+  return s;
+}
+/* 把姓名转为拼音首字母连写（如「吕发权」→「lfq」），用于首字母选人 */
+function nameInitials(name){
+  if(!name)return'';
+  let s='';
+  for(const ch of name){
+    if(PY[ch]){s+=PY[ch][0];}
+    else if(/[a-zA-Z]/.test(ch)){s+=ch.toLowerCase();}
+  }
+  return s;
+}
+
 /* ============================================================
    考勤
    ============================================================ */
 function renderAttendance(root){
+  if(curCls==='all'||!clsExists(curCls))curCls=defaultClsId();
   root.innerHTML=`
   <div class="page-title">考勤点名</div>
   <div class="page-sub">选择日期，逐一对学生进行出勤登记</div>
   <div class="card">
+    ${clsTabsHtml('atClsTabs',false)}
     <div class="row" style="margin-bottom:14px">
       <input id="atDate" type="date" value="${new Date().toISOString().slice(0,10)}">
       <button class="btn primary" data-action="at-load">载入名单</button>
       <select id="atQuick" style="min-width:160px"><option value="">快速标记…</option><option value="present">全部出勤</option><option value="absent">全部缺席</option><option value="late">全部迟到</option></select>
+      <input id="atSearch" placeholder="🔍 按字母 / 拼音 / 学号筛选…" style="flex:1;min-width:180px" autocomplete="off">
     </div>
     <div class="list" id="atList"></div>
     <div class="row end" style="margin-top:14px"><button class="btn primary" data-action="at-save">保存考勤</button></div>
     <div style="margin-top:18px" id="atHistory"></div>
   </div>`;
+  bindClsTabs('atClsTabs');
   renderAtHistory();
+  /* 检索框：实时过滤学生名单（按字母/拼音/姓名/学号） */
+  const atInputS=$('#atSearch');if(atInputS && !atInputS.dataset.bound){
+    atInputS.dataset.bound='1';
+    atInputS.addEventListener('input',()=>{
+      /* 仅当 atList 已渲染过才过滤，避免空列表闪屏 */
+      const box=$('#atList');if(box)loadAtList();
+    });
+  }
 }
 let atState={date:'',present:[],late:[],absent:[]};
 function loadAtList(){
   const date=$('#atDate').value;atState.date=date;
-  const existing=DB.attendance.find(a=>a.date===date);
-  const active=DB.students.filter(s=>!s.archived);
+  const existing=DB.attendance.find(a=>a.date===date && a.cls===(curCls==='all'?defaultClsId():curCls));
+  let active=DB.students.filter(s=>!s.archived);
+  if(curCls!=='all')active=active.filter(s=>stuCls(s)===curCls);
   atState.present=existing?existing.present.slice():(active.map(s=>s.id));
   atState.late=existing?existing.late.slice():[];
   atState.absent=existing?existing.absent.slice():[];
   const box=$('#atList');if(!box)return;
-  if(!active.length){box.innerHTML='<div class="empty"><div class="big">🧑‍🎓</div>请先在「学生档案」中添加学生</div>';return;}
-  box.innerHTML=active.map(s=>{
-    const st=atState.absent.includes(s.id)?'absent':atState.late.includes(s.id)?'late':'present';
-    return `<div class="item"><div class="it-main"><div class="it-title">${esc(s.name)}</div></div>
-    <div class="it-actions">
-      <button class="btn sm ${st==='present'?'primary':''}" data-act="at-set" data-id="${s.id}" data-st="present">出勤</button>
-      <button class="btn sm ${st==='late'?'primary':''}" data-act="at-set" data-id="${s.id}" data-st="late">迟到</button>
-      <button class="btn sm ${st==='absent'?'primary':''}" data-act="at-set" data-id="${s.id}" data-st="absent">缺席</button>
-    </div></div>`;
-  }).join('');
+  if(!active.length){box.innerHTML='<div class="empty"><div class="big">🧑‍🎓</div>'+(curCls==='all'?'请先在「学生档案」中添加学生':'「'+clsLabel(curCls)+'」还没有学生，请先到「学生档案」添加')+'</div>';return;}
+  /* 按字母 / 拼音 / 学号筛选 */
+  const q=($('#atSearch')?.value||'').toLowerCase().trim();
+  let show=active;
+  if(q){
+    show=active.filter(s=>{
+      const cache=(s.name+' '+(s.no||'')+' '+namePinyin(s.name)+' '+nameInitials(s.name)).toLowerCase();
+      return cache.includes(q);
+    });
+  }
+  if(!show.length){box.innerHTML='<div class="muted" style="padding:18px;text-align:center">没有匹配「<b>'+esc(q)+'</b>」的学生</div>';return;}
+  const cells=[];
+  /* 计算当前学生状态映射：absent > late > present */
+  const stOf=new Map();
+  show.forEach(s=>{
+    let st='present';
+    if(atState.absent.includes(s.id))st='absent';
+    else if(atState.late.includes(s.id))st='late';
+    stOf.set(s.id,st);
+  });
+  show.forEach((s,i)=>{
+    const st=stOf.get(s.id);
+    const ini=nameInitials(s.name);
+    const sub=(s.no?esc(s.no):'')+(ini?' · '+esc(ini):'');
+    cells.push(`<div class="stu-cell at-cell st-${st}" data-action="at-set" data-id="${s.id}" data-st="${st}" title="${esc(s.name)}（点击循环：出勤 → 迟到 → 缺席）">
+      <div class="nm">${esc(s.name||'')}</div>
+      ${sub?`<div class="sub">${sub}</div>`:''}
+      <span class="st-tag" aria-hidden="true"></span>
+      <span class="quick">
+        <span class="qb" data-action="at-set" data-id="${s.id}" data-st="present" title="标记出勤">✓</span>
+        <span class="qb" data-action="at-set" data-id="${s.id}" data-st="late" title="标记迟到">迟</span>
+        <span class="qb" data-action="at-set" data-id="${s.id}" data-st="absent" title="标记缺席">✗</span>
+      </span>
+    </div>`);
+  });
+  /* 凑齐 8 的倍数，让最末行不留半个空 */
+  const remainder=cells.length%8;
+  if(remainder){
+    const pad=8-remainder;
+    for(let i=0;i<pad;i++)cells.push('<div class="stu-cell empty" aria-hidden="true">＋</div>');
+  }
+  const total=show.length;
+  box.innerHTML=`<div class="stu-grid at-grid">${cells.join('')}</div>
+    <div class="muted" style="text-align:center;margin-top:8px;font-size:12px">${clsLabel(curCls)}共 ${total} 人（点击单元格循环切换：出勤 → 迟到 → 缺席；悬停可快捷选择）</div>`;
 }
 function renderAtHistory(){
   const box=$('#atHistory');if(!box)return;
   const list=DB.attendance.slice().sort((a,b)=>b.date.localeCompare(a.date));
   if(!list.length){box.innerHTML='<div class="muted" style="margin-top:10px">暂无历史考勤记录</div>';return;}
   box.innerHTML='<div class="section-h" style="margin-top:6px">历史记录</div>'+list.map(a=>{
-    const tot=DB.students.filter(s=>!s.archived).length||(a.present.length+a.late.length+a.absent.length);
-    return `<div class="item"><div class="it-main"><div class="it-title">${fmt(a.date)}</div>
-      <div class="it-meta"><span class="tag green">出勤 ${a.present.length}</span><span class="tag warn">迟到 ${a.late.length}</span><span class="tag red">缺席 ${a.absent.length}</span></div></div>
-      <div class="it-actions"><button class="btn sm danger" data-act="at-del" data-id="${a.date}">删除</button></div></div>`;
+    const clsStu=DB.students.filter(s=>!s.archived && (a.cls?stuCls(s)===a.cls:true)).length;
+    const tot=clsStu||(a.present.length+a.late.length+a.absent.length);
+    const clsTag=a.cls?`<span class="tag" style="background:var(--chip);color:var(--primary);font-weight:600">${clsLabel(a.cls)}</span> `:'';
+    return `<div class="item"><div class="it-main"><div class="it-title">${clsTag}${fmt(a.date)}</div>
+      <div class="it-meta"><span class="tag green">出勤 ${a.present.length}</span><span class="tag warn">迟到 ${a.late.length}</span><span class="tag red">缺席 ${a.absent.length}</span><span class="muted">共 ${tot} 人</span></div></div>
+      <div class="it-actions"><button class="btn sm danger" data-action="at-del" data-id="${a.date}" data-cls="${a.cls||''}">删除</button></div></div>`;
   }).join('');
 }
 
@@ -1690,9 +2330,9 @@ function renderArchive(root){
   <div class="list" id="archStu"></div>`;
   $('#archTodo').innerHTML=todoArch.map(t=>`<div class="item"><div class="it-main"><div class="it-title">${esc(t.title)}</div>
     <div class="it-meta"><span class="tag">${esc(t.tag)}</span><span>📅 ${fmt(t.deadline)}</span></div></div>
-    <div class="it-actions"><button class="btn sm" data-act="arch-restore-todo" data-id="${t.id}">恢复</button><button class="btn sm danger" data-act="arch-del-todo" data-id="${t.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无</div>';
+    <div class="it-actions"><button class="btn sm" data-action="arch-restore-todo" data-id="${t.id}">恢复</button><button class="btn sm danger" data-action="arch-del-todo" data-id="${t.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无</div>';
   $('#archStu').innerHTML=stuArch.map(s=>`<div class="item"><div class="it-main"><div class="it-title">${esc(s.name)} <span class="muted">${esc(s.no||'')}</span></div></div>
-    <div class="it-actions"><button class="btn sm" data-act="arch-restore-stu" data-id="${s.id}">恢复</button><button class="btn sm danger" data-act="arch-del-stu" data-id="${s.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无</div>';
+    <div class="it-actions"><button class="btn sm" data-action="arch-restore-stu" data-id="${s.id}">恢复</button><button class="btn sm danger" data-action="arch-del-stu" data-id="${s.id}">删除</button></div></div>`).join('')||'<div class="muted">暂无</div>';
 }
 
 /* ============================================================
@@ -1701,15 +2341,20 @@ function renderArchive(root){
 function renderGrades(root){
   root.innerHTML=`
   <div class="page-title">成绩分析</div>
-  <div class="page-sub">试卷知识点分析 + 完整成绩看板（数据本地保存）</div>
+  <div class="page-sub">试卷分析 · 成绩看板 · 成长曲线（数据本地保存）</div>
   <div class="tabs">
     <button class="tab active" data-tab="paper">试卷分析</button>
     <button class="tab" data-tab="board">成绩看板</button>
+    <button class="tab" data-tab="trend">成长曲线</button>
   </div>
   <div class="tab-content active" data-tc="paper" id="gPaper"></div>
-  <div class="tab-content" data-tc="board" id="gBoard"></div>`;
+  <div class="tab-content" data-tc="board" id="gBoard"></div>
+  <div class="tab-content" data-tc="trend" id="gTrend"></div>`;
   bindTabs(root);
   renderPaper();renderBoard();
+  // 切换到成长曲线 tab 时再渲染（默认不在前台）
+  const trendBtn=[...root.querySelectorAll('.tab')].find(b=>b.dataset.tab==='trend');
+  trendBtn&&trendBtn.addEventListener('click',()=>renderTrend());
 }
 function renderPaper(){
   const box=$('#gPaper');if(!box)return;
@@ -1743,7 +2388,7 @@ function renderPaperKp(){
       <input value="${esc(k.name)}" data-kp-name="${i}" placeholder="知识点名称" style="flex:1;min-width:160px">
       <input type="number" value="${k.rate}" data-kp-rate="${i}" min="0" max="100" style="width:90px"> <span>%</span>
     </div></div>
-    <div class="it-actions"><button class="btn sm danger" data-act="paper-del-kp" data-i="${i}">删除</button></div></div>`).join('');
+    <div class="it-actions"><button class="btn sm danger" data-action="paper-del-kp" data-i="${i}">删除</button></div></div>`).join('');
 }
 function renderPaperHistory(){
   const box=$('#paperHistory');if(!box)return;
@@ -1754,7 +2399,7 @@ function renderPaperHistory(){
       <div class="it-meta">知识点 ${e.kp.length} 个 · 薄弱 ${weak.length} 个</div>
       <div style="margin-top:8px">${e.kp.map(k=>{const cls=k.rate<60?'danger':k.rate<75?'warn':'';return `<div style="margin:4px 0"><div class="bar-lbl"><span>${esc(k.name)}</span><span>${k.rate}%</span></div><div class="bar ${cls}"><i style="width:${k.rate}%"></i></div></div>`;}).join('')}</div>
       ${e.suggest?`<div class="it-meta" style="margin-top:8px"><span class="tag blue">教学建议</span></div><div style="font-size:13px;white-space:pre-wrap">${esc(e.suggest)}</div>`:''}
-    </div><div class="it-actions"><button class="btn sm danger" data-act="paper-del" data-id="${e.id}">删除</button></div></div>`;
+    </div><div class="it-actions"><button class="btn sm danger" data-action="paper-del" data-id="${e.id}">删除</button></div></div>`;
   }).join('');
 }
 function analyzePaper(){
@@ -1784,32 +2429,69 @@ function analyzePaper(){
 /* 成绩看板 */
 function renderBoard(){
   const box=$('#gBoard');if(!box)return;
+  if(curCls==='all'||!clsExists(curCls))curCls=defaultClsId();
+  const usedSubs=new Set();DB.exams.forEach(e=>e.subjects.forEach(s=>usedSubs.add(s)));
+  const subjOptions=[...SHANDONG_COURSES.filter(s=>!usedSubs.has(s)),...SHANDONG_COURSES.filter(s=>usedSubs.has(s))]
+    .map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
   box.innerHTML=`
+  ${clsTabsHtml('exClsTabs', false)}
   <div class="card" style="margin-bottom:18px">
     <div class="section-h">录入一次考试</div>
-    <div class="row" style="margin-bottom:10px">
+    <div class="row" style="margin-bottom:8px">
       <input id="exName" placeholder="考试名称，如：期中考试" style="min-width:180px">
       <input id="exDate" type="date">
-      <input id="exSubjects" placeholder="科目，逗号分隔：语文,数学,英语" style="flex:1;min-width:220px">
-      <button class="btn primary" data-action="ex-add">+ 创建考试并录入</button>
     </div>
+    <div class="muted" style="font-size:13px;margin:4px 0 6px">参加科目（可多选，先在下方选；成绩里会出现同样的列）</div>
+    <div id="exSubjectsBox" class="subj-chips"></div>
+    <input type="hidden" id="exSubjects" value="">
+    <div class="row subj-add">
+      <select id="exSubjSelect" style="min-width:160px">
+        <option value="">+ 添加科目…</option>
+        ${subjOptions}
+      </select>
+      <button class="btn" data-action="ex-subj-add">+ 添加</button>
+      <span style="flex:1"></span>
+      <button class="btn ghost" data-action="ex-tpl" title="下载当前科目的 Excel 模板">📋 下载模板</button>
+      <button class="btn ghost" data-action="ex-upload" title="从 Excel 一键导入成绩">📥 Excel 一键导入</button>
+      <input type="file" id="exExcelFile" accept=".xlsx,.xls,.csv" style="display:none">
+    </div>
+    <div id="exSubjWarn" class="muted" style="color:var(--danger);font-size:12px;margin-top:6px;display:none"></div>
+    <div class="row" style="margin-top:10px"><button class="btn primary" data-action="ex-add">+ 创建考试并录入</button></div>
     <div id="exEditor"></div>
   </div>
   <div id="boardOut"></div>
   <div class="section-h" style="margin-top:18px">已录入考试</div>
   <div class="list" id="exList"></div>`;
+  $('#exSubjectsBox').innerHTML='<span class="subj-empty">还没有选科目，请从下方下拉选</span>';
   renderExList();
+  bindClsTabs('exClsTabs');
+  /* 顶部隐藏的 Excel 上传 input（点「📥 Excel 一键导入」触发，由 importExamFromExcel 自动建考试+识别科目） */
+  const exExcelFile=$('#exExcelFile');
+  if(exExcelFile && !exExcelFile.dataset.bound){
+    exExcelFile.onchange=(e)=>{
+      const f=e.target.files[0];
+      if(f)importExamFromExcel(null,f);
+      e.target.value='';
+    };
+    exExcelFile.dataset.bound='1';
+  }
 }
 function renderExList(){
   const box=$('#exList');if(!box)return;
-  if(!DB.exams.filter(e=>!e.paper).length){box.innerHTML='<div class="empty"><div class="big">📈</div>暂无考试成绩</div>';return;}
-  box.innerHTML=DB.exams.filter(e=>!e.paper).map(e=>`
-    <div class="item"><div class="it-main"><div class="it-title">${esc(e.name)} <span class="muted">${fmt(e.date)}</span></div>
+  const list=DB.exams.filter(e=>!e.paper && (e.cls||defaultClsId())===curCls);
+  if(!list.length){box.innerHTML='<div class="empty"><div class="big">📈</div>暂无'+clsLabel(curCls)+'考试成绩</div>';return;}
+  box.innerHTML=list.map(e=>{
+    const openId=$('#boardOut').dataset.examId||'';
+    const isOpen=openId===e.id;
+    const btnLabel=isOpen?'▴ 收起看板':'查看看板';
+    const btnCls=isOpen?'btn sm primary':'btn sm';
+    return `<div class="item"><div class="it-main"><div class="it-title">${esc(e.name)} <span class="muted">${fmt(e.date)}</span></div>
       <div class="it-meta">科目：${e.subjects.join('、')} · 人数：${e.students.length}</div></div>
       <div class="it-actions">
-        <button class="btn sm" data-act="ex-view" data-id="${e.id}">查看看板</button>
-        <button class="btn sm danger" data-act="ex-del" data-id="${e.id}">删除</button>
-      </div></div>`).join('');
+        <button class="${btnCls}" data-action="ex-view" data-id="${e.id}">${btnLabel}</button>
+        <button class="btn sm danger" data-action="ex-del" data-id="${e.id}">删除</button>
+      </div></div>`;
+  }).join('');
 }
 function computeStats(scores){
   const n=scores.length;if(!n)return null;
@@ -1823,9 +2505,56 @@ function computeStats(scores){
   const low=scores.filter(s=>s<60).length/n*100;
   return {n,avg,max,min,std,pass,excellent,low};
 }
+/* 渲染某一层次的学生成绩表（带班内排名） */
+function renderLayerTable(list,ex,rankOffset){
+  if(!list||!list.length)return '<div class="muted" style="margin:8px 0">该层次暂无学生</div>';
+  return `<div class="scroll-x"><table class="tb"><thead><tr><th>班内排名</th><th>姓名</th>${ex.subjects.map(s=>`<th>${esc(s)}</th>`).join('')}<th>总分</th></tr></thead><tbody>`
+    +list.map((s,i)=>`<tr><td>${rankOffset+i+1}</td><td><b>${esc(s.name)}</b></td>`
+      +ex.subjects.map(sub=>{const v=s.subjects[sub];return `<td>${v==null?'-':v}</td>`;}).join('')
+      +`<td><b>${s.total}</b></td></tr>`).join('')
+    +`</tbody></table></div>`;
+}
+
+/* 「高频错题」点击 chip 后展开：低于该科均分的学生及分数 */
+function renderWeakDetail(subj){
+  const box=$('#weakDetail');if(!box||!subj)return;
+  const ex=DB.exams.find(x=>x.id===($('#boardOut').dataset.examId||''));
+  if(!ex){box.innerHTML='';box.hidden=true;return;}
+  const validScores=ex.students.map(s=>s.subjects[subj]||0).filter(v=>v>0);
+  const st=computeStats(validScores);
+  const subjAvg=st?st.avg:0;
+  const list=ex.students
+    .filter(s=>(s.subjects[subj]||0)>0)
+    .map(s=>({name:s.name,sid:s.id,score:s.subjects[subj]||0}))
+    .filter(s=>s.score<subjAvg)
+    .sort((a,b)=>a.score-b.score);
+  const rankMap={};
+  ex.students.slice().sort((a,b)=>b.total-a.total).forEach((s,i)=>{rankMap[s.id]=i+1;});
+  box.innerHTML=`<div style="margin-top:14px;border-top:1px dashed var(--border);padding-top:12px">
+    <div class="row between" style="align-items:center;margin-bottom:8px">
+      <div style="font-weight:700">${esc(subj)}：均分 ${subjAvg.toFixed(1)}，${list.length} 人低于均分</div>
+      <button class="btn sm ghost" data-action="weak-hide" title="收起">▴ 收起</button>
+    </div>
+    ${list.length?`<div class="scroll-x"><table class="tb"><thead><tr><th>姓名</th><th>${esc(subj)}分数</th><th>与均分差</th><th>总分名次</th></tr></thead><tbody>
+      ${list.map(s=>{const diff=s.score-subjAvg;const rank=rankMap[s.sid]||'-';
+        return `<tr><td><a href="#" class="stu-link" data-action="stu-goto" data-sid="${esc(s.sid)}">${esc(s.name)}</a></td><td><b style="color:#b53a3a">${s.score}</b></td><td class="cell-bad">${diff.toFixed(1)}</td><td>${rank}</td></tr>`;
+      }).join('')}
+    </tbody></table></div>`:'<div class="muted" style="padding:8px 0">没有低于均分的学生 🎉</div>'}
+  </div>`;
+  box.hidden=false;
+}
 function renderBoardOut(ex){
   const box=$('#boardOut');if(!box)return;
   if(!ex){box.innerHTML='<div class="muted" style="margin-top:8px">选择一次考试查看看板</div>';return;}
+  /* 顶部标题条：让老师清楚在看哪一场 + 提供板内「收起」入口 */
+  html=`<div class="card" style="background:var(--card);display:flex;align-items:center;gap:10px;border-radius:14px;padding:10px 14px;margin-bottom:12px">
+    <span style="font-size:18px">📊</span>
+    <span style="font-weight:700;font-size:15px">${esc(ex.name)}</span>
+    <span class="tag" style="background:var(--chip);color:var(--text)">${clsLabel(ex.cls||'1')}</span>
+    <span class="muted" style="font-size:12px">${fmt(ex.date)} · 科目 ${ex.subjects.join('、')} · ${ex.students.length} 人</span>
+    <span style="flex:1"></span>
+    <button class="btn sm ghost" data-action="ex-collapse" title="收起看板">▴ 收起</button>
+  </div>`;
   const allScores=ex.students.map(s=>s.total);
   const st=computeStats(allScores);
   // 分数分布直方图
@@ -1841,7 +2570,7 @@ function renderBoardOut(ex){
   const subjAvg={};ex.subjects.forEach(s=>{subjAvg[s]=computeStats(ex.students.map(x=>x.subjects[s]||0)).avg;});
   const weakSubj={};ex.subjects.forEach(s=>{const arr=ex.students.map(x=>x.subjects[s]||0);weakSubj[s]=arr.filter(v=>v<subjAvg[s]).length;});
   // 高频错题（用知识点失分近似：总分最低的学生群体）
-  let html=`
+  html+=`
   <div class="section-h">基础数据看板</div>
   <div class="grid-cards" style="margin-bottom:14px">
     <div class="stat"><div class="num">${st.avg.toFixed(1)}</div><div class="lbl">平均分</div></div>
@@ -1853,26 +2582,141 @@ function renderBoardOut(ex){
     <div class="stat"><div class="num">${st.low.toFixed(0)}%</div><div class="lbl">低分率</div></div>
   </div>
   <div class="card" style="margin-bottom:18px"><div class="card-h">分数分布直方图</div><canvas id="histCanvas" width="680" height="240"></canvas></div>
-  <div class="section-h">个体学生分析</div>
-  <div class="scroll-x"><table class="tb"><thead><tr><th>排名</th><th>姓名</th>${ex.subjects.map(s=>`<th>${esc(s)}</th>`).join('')}<th>总分</th><th>班内排名</th><th>强弱学科</th></tr></thead><tbody>
-    ${sorted.map((s,idx)=>{const strong=ex.subjects.reduce((a,b)=>s.subjects[b]>s.subjects[a]?b:a);const weak=ex.subjects.reduce((a,b)=>s.subjects[b]<s.subjects[a]?b:a);
-      return `<tr><td>${idx+1}</td><td>${esc(s.name)}</td>${ex.subjects.map(sub=>`<td>${s.subjects[sub]}</td>`).join('')}<td><b>${s.total}</b></td><td>${idx+1}</td><td><span class="tag green">强:${esc(strong)}</span> <span class="tag red">弱:${esc(weak)}</span></td></tr>`;}).join('')}
-  </tbody></table></div>
-  <div class="section-h" style="margin-top:18px">分层学情分析</div>
+  <div class="section-h" style="margin-top:18px">分层学情分析 <span class="muted" style="font-size:12px;font-weight:400;margin-left:6px">（点击卡片查看学生及成绩）</span></div>
   <div class="grid-cards" style="margin-bottom:14px">
-    <div class="stat"><div class="num">${top.length}</div><div class="lbl">优生层（前27%）</div></div>
-    <div class="stat"><div class="num">${mid.length}</div><div class="lbl">中等层</div></div>
-    <div class="stat"><div class="num">${bottom.length}</div><div class="lbl">待进层（后27%）</div></div>
+    <div class="stat layer-card" data-action="layer-toggle" data-layer="top" title="点击查看优生层名单及成绩"><div class="num">${top.length}</div><div class="lbl">优生层（前27%）<span class="layer-arrow">▾</span></div></div>
+    <div class="stat layer-card" data-action="layer-toggle" data-layer="mid" title="点击查看中等层名单及成绩"><div class="num">${mid.length}</div><div class="lbl">中等层<span class="layer-arrow">▾</span></div></div>
+    <div class="stat layer-card" data-action="layer-toggle" data-layer="bottom" title="点击查看待进层名单及成绩"><div class="num">${bottom.length}</div><div class="lbl">待进层（后27%）<span class="layer-arrow">▾</span></div></div>
+  </div>
+  <div id="layerDetailWrap">
+    <div class="layer-detail" id="layerDetail-top" data-layer="top" hidden>
+      <div class="card-h">优生层（前27%）学生成绩</div>
+      ${renderLayerTable(top,ex,0)}
+    </div>
+    <div class="layer-detail" id="layerDetail-mid" data-layer="mid" hidden>
+      <div class="card-h">中等层学生成绩</div>
+      ${renderLayerTable(mid,ex,top.length)}
+    </div>
+    <div class="layer-detail" id="layerDetail-bottom" data-layer="bottom" hidden>
+      <div class="card-h">待进层（后27%）学生成绩</div>
+      ${renderLayerTable(bottom,ex,top.length+mid.length)}
+    </div>
   </div>
   <div class="card" style="margin-bottom:18px"><div class="card-h">各科目薄弱人数（失分统计）</div>
     ${ex.subjects.map(s=>`<div style="margin:6px 0"><div class="bar-lbl"><span>${esc(s)}（均分 ${subjAvg[s].toFixed(1)}）</span><span>${weakSubj[s]} 人低于均分</span></div><div class="bar ${weakSubj[s]>ex.students.length/2?'warn':''}"><i style="width:${weakSubj[s]/ex.students.length*100}%"></i></div></div>`).join('')}
   </div>
-  <div class="card"><div class="card-h">高频错题 / 薄弱点提示</div>
-    <div>${ex.subjects.map(s=>`<span class="tag ${weakSubj[s]>ex.students.length/2?'red':'warn'}">${esc(s)} 失分 ${weakSubj[s]} 人</span>`).join(' ')}</div>
+  <div class="card"><div class="card-h">高频错题 / 薄弱点提示 <span class="muted" style="font-size:12px;font-weight:400;margin-left:6px">（点击标签查看低于该科均分的学生及分数）</span></div>
+    <div>${ex.subjects.map(s=>`<a href="#" class="tag ${weakSubj[s]>ex.students.length/2?'red':'warn'} weak-chip" data-action="weak-show" data-subj="${esc(s)}" title="点击查看 ${esc(s)} 低于均分的学生">${esc(s)} 失分 ${weakSubj[s]} 人 <span class="weak-chev">▾</span></a>`).join(' ')}</div>
+    <div id="weakDetail" hidden></div>
     <div class="muted" style="margin-top:8px">提示：失分人数超过半数的科目需安排专项讲评与巩固练习。</div>
-  </div>`;
+  </div>
+  <div class="card" style="margin-bottom:14px;padding:12px 14px">
+    <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-weight:700;font-size:14px">📏 强弱判定标准</span>
+      <span style="flex:1"></span>
+      <span class="muted" style="font-size:12px">（修改实时生效，跨刷新保留）</span>
+    </div>
+    {/* 全局默认 */}
+    <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;background:var(--bg);border-radius:10px;margin-bottom:10px">
+      <span style="font-weight:600">默认</span>
+      <span class="muted" style="font-size:12px">强</span><span style="font-weight:700;color:var(--success)">≥</span>
+      <input id="ruleStrong" type="number" min="0" max="150" value="${RULES.default.strong}" style="width:64px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-weight:700;color:var(--success);font-size:14px;text-align:center">
+      <span class="muted" style="font-size:12px">分；弱</span><span style="font-weight:700;color:var(--danger)">&lt;</span>
+      <input id="ruleWeak" type="number" min="0" max="150" value="${RULES.default.weak}" style="width:64px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-weight:700;color:var(--danger);font-size:14px;text-align:center">
+      <span class="muted" style="font-size:12px">分</span>
+      <span style="flex:1"></span>
+      <button class="btn sm ghost" data-action="rule-reset" title="恢复默认 85 / 60">↺ 重置全部</button>
+    </div>
+    {/* 各学科独立标准 */}
+    <div class="muted" style="font-size:12px;margin-bottom:6px">按学科单独制定（留空 = 用「默认」）</div>
+    <div id="rulePerSubj" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">
+      ${ex.subjects.map(subj=>{
+        const ps=RULES.perSubject[subj]||{};
+        const useDefault=!ps.strong||!ps.weak;
+        return `<div class="rule-row" data-subj="${esc(subj)}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid ${useDefault?'var(--border)':'var(--primary)'};border-radius:10px;background:${useDefault?'var(--card)':'rgba(46,158,91,.06)'}">
+          <span style="font-weight:600;flex:0 0 auto">${esc(subj)}</span>
+          <span class="muted" style="font-size:11px">强</span><span style="font-weight:700;color:var(--success)">≥</span>
+          <input type="number" class="rule-per-s" data-subj="${esc(subj)}" min="0" max="150" value="${useDefault?RULES.default.strong:ps.strong}" placeholder="${RULES.default.strong}" style="width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--success);font-size:13px;text-align:center">
+          <span class="muted" style="font-size:11px">弱</span><span style="font-weight:700;color:var(--danger)">&lt;</span>
+          <input type="number" class="rule-per-w" data-subj="${esc(subj)}" min="0" max="150" value="${useDefault?RULES.default.weak:ps.weak}" placeholder="${RULES.default.weak}" style="width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--danger);font-size:13px;text-align:center">
+          <button class="btn sm ghost rule-per-reset" data-action="rule-subj-reset" data-subj="${esc(subj)}" title="重置该学科为默认" style="padding:2px 8px;font-size:11px">↺</button>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>
+  <div class="section-h" style="margin-top:18px">个体学生分析 <span class="muted" style="font-size:12px;font-weight:400;margin-left:6px">（点击姓名直接查看该学生的成长曲线）</span></div>
+  <div class="scroll-x tb-sticky"><table class="tb"><thead><tr><th>排名</th><th>姓名</th>${ex.subjects.map(s=>`<th>${esc(s)}</th>`).join('')}<th>总分</th><th>班内排名</th><th>强弱学科</th></tr></thead><tbody>
+    ${sorted.map((s,idx)=>{
+  const strongs=ex.subjects.filter(sub=>{const r=ruleFor(sub);return (s.subjects[sub]||0)>=r.strong;});
+  const weaks=ex.subjects.filter(sub=>{const r=ruleFor(sub);return (s.subjects[sub]||0)<r.weak;});
+      const strongChips=strongs.map(sub=>`<span class="tag green">强：${esc(sub)} ${s.subjects[sub]}</span>`).join(' ');
+      const weakChips=weaks.map(sub=>`<span class="tag red">弱：${esc(sub)} ${s.subjects[sub]}</span>`).join(' ');
+      const allChips=strongChips+(strongChips&&weakChips?'<br>':'')+weakChips||'<span class="muted" style="font-size:12px">无</span>';
+      return `<tr><td>${idx+1}</td><td><a href="#" class="stu-link" data-action="stu-goto" data-sid="${esc(s.id)}" title="点击查看该学生的成长曲线">${esc(s.name)}</a></td>${ex.subjects.map(sub=>`<td>${s.subjects[sub]}</td>`).join('')}<td><b>${s.total}</b></td><td>${idx+1}</td><td style="line-height:1.8">${allChips}</td></tr>`;}).join('')}
+  </tbody></table></div>`;
   box.innerHTML=html;
   drawHistogram($('#histCanvas'),counts);
+  attachStuGoto(box);
+
+  /* 「强弱判定标准」即时生效：oninput 即重渲染整个 #boardOut（性能足够，肉眼无感） */
+  const rStrong=$('#ruleStrong'),rWeak=$('#ruleWeak');
+  if(rStrong && !rStrong.dataset.bound){
+    rStrong.dataset.bound='1';
+    rWeak.dataset.bound='1';
+    const onChange=()=>{
+      const sv=Math.max(0,Math.min(150,+rStrong.value||0));
+      const wv=Math.max(0,Math.min(150,+rWeak.value||0));
+      if(sv<=wv){toast('强项分数应大于弱项分数');return;}
+      RULES.default={strong:sv,weak:wv};saveRules();
+      renderBoardOut(ex);  /* 重渲染：所有依赖 RULES 的部分会刷新 */
+    };
+    rStrong.addEventListener('input',onChange);
+    rWeak.addEventListener('input',onChange);
+  }
+  /* 各学科独立标准：oninput 即时覆盖 */
+  const ruleBox=$('#rulePerSubj');
+  if(ruleBox && !ruleBox.dataset.bound){
+    ruleBox.dataset.bound='1';
+    ruleBox.addEventListener('input',e=>{
+      const inp=e.target.closest('input.rule-per-s,input.rule-per-w');
+      if(!inp)return;
+      const subj=inp.dataset.subj;
+      const row=inp.closest('.rule-row');
+      const sInp=row.querySelector('input.rule-per-s');
+      const wInp=row.querySelector('input.rule-per-w');
+      const sv=Math.max(0,Math.min(150,+sInp.value||0));
+      const wv=Math.max(0,Math.min(150,+wInp.value||0));
+      if(sv<=wv){toast('强项分数应大于弱项分数');return;}
+      RULES.perSubject[subj]={strong:sv,weak:wv};
+      saveRules();
+      /* 该科目已变独立：边框变主色 */
+      row.style.borderColor='var(--primary)';
+      row.style.background='rgba(46,158,91,.06)';
+      renderBoardOut(ex);
+    });
+  }
+  /* 直接给所有 weak-chip 绑 onclick（不依赖全局委托） */
+  box.querySelectorAll('.weak-chip').forEach(c=>{
+    c.onclick=(e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const subj=c.dataset.subj;
+      const detail=$('#weakDetail');
+      if(!detail)return;
+      const willShow=detail.hasAttribute('hidden') || detail.dataset.subj!==subj;
+      box.querySelectorAll('.weak-chip').forEach(x=>x.classList.remove('active'));
+      detail.hidden=true;
+      detail.innerHTML='';
+      if(willShow){
+        renderWeakDetail(subj);
+        detail.dataset.subj=subj;
+        c.classList.add('active');
+        detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+      } else {
+        delete detail.dataset.subj;
+      }
+    };
+  });
 }
 function drawHistogram(cv,counts){
   if(!cv)return;const ctx=cv.getContext('2d');
@@ -1893,6 +2737,442 @@ function drawHistogram(cv,counts){
   // 轴
   ctx.strokeStyle=muted;ctx.beginPath();ctx.moveTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
   ctx.fillStyle=text;ctx.textAlign='left';ctx.fillText('人数',6,18);
+}
+
+/* ============================================================
+   模块：成长曲线（班级各科走势 + 全班成绩对比 + 学生个人成长）
+   ============================================================ */
+const TREND_COLORS=['#2e9e5b','#3a8ee6','#e35b5b','#f0a020','#9c6cf5','#16a3a3','#d65ba5','#5b6dd6'];
+function drawLineChart(cv,series,opts){
+  if(!cv)return;
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height,pad={l:42,r:18,t:18,b:32};
+  const pW=W-pad.l-pad.r,pH=H-pad.t-pad.b;
+  ctx.clearRect(0,0,W,H);
+  const cStyle=getComputedStyle(document.documentElement);
+  const text=cStyle.getPropertyValue('--text').trim()||'#333';
+  const muted=cStyle.getPropertyValue('--muted').trim()||'#888';
+  const grid=cStyle.getPropertyValue('--border').trim()||'#eee';
+
+  const yMin=opts.yMin??0,yMax=opts.yMax??100;
+  const xLabels=opts.xLabels||[];
+
+  // 网格 + Y 轴刻度
+  ctx.strokeStyle=grid;ctx.lineWidth=1;
+  ctx.fillStyle=muted;ctx.font='11px sans-serif';ctx.textAlign='right';
+  for(let v=yMin;v<=yMax;v+=25){
+    const y=pad.t+pH-(v-yMin)/(yMax-yMin)*pH;
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+    ctx.fillText(v,pad.l-6,y+4);
+  }
+
+  // X 轴标签（避免拥挤，最多显示 6 个）
+  ctx.textAlign='center';
+  const step=xLabels.length>6?Math.ceil(xLabels.length/6):1;
+  xLabels.forEach((lbl,i)=>{
+    if(i%step!==0&&i!==xLabels.length-1)return;
+    const x=pad.l+(xLabels.length>1?i/(xLabels.length-1)*pW:pW/2);
+    ctx.fillText((lbl||'').slice(5),x,H-pad.b+16); // 显示 MM-DD
+  });
+
+  // 系列折线 + 数据点 + 数值
+  series.forEach((s,si)=>{
+    const color=opts.color||TREND_COLORS[si%TREND_COLORS.length];
+    const pts=s.points.filter(p=>p.y!==null&&!isNaN(p.y));
+    if(!pts.length)return;
+    ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.lineJoin='round';
+    ctx.beginPath();
+    pts.forEach((p,i)=>{
+      const x=pad.l+(pts.length>1?i/(pts.length-1)*pW:pW/2);
+      const y=pad.t+pH-(p.y-yMin)/(yMax-yMin)*pH;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+
+    // 数据点 + 数值
+    ctx.fillStyle=color;
+    pts.forEach((p,i)=>{
+      const x=pad.l+(pts.length>1?i/(pts.length-1)*pW:pW/2);
+      const y=pad.t+pH-(p.y-yMin)/(yMax-yMin)*pH;
+      ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();
+      ctx.font='bold 11px sans-serif';ctx.fillStyle=text;ctx.textAlign='center';
+      ctx.fillText(Math.round(p.y),x,y-9);
+      ctx.fillStyle=color;
+    });
+  });
+
+  // X 轴
+  ctx.strokeStyle=muted;ctx.beginPath();ctx.moveTo(pad.l,H-pad.b);ctx.lineTo(W-pad.r,H-pad.b);ctx.stroke();
+}
+
+function getTrendExams(){
+  return DB.exams.filter(e=>!e.paper).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+function getTrendSubjects(exams){
+  const s=new Set();
+  exams.forEach(e=>e.subjects.forEach(x=>s.add(x)));
+  return [...s];
+}
+function trendBadge(curr,prev,unit){
+  if(curr==null||prev==null)return '<span class="tag" style="background:var(--chip);color:var(--muted)">暂无</span>';
+  const diff=curr-prev;
+  if(Math.abs(diff)<0.5)return '<span class="tag" style="background:var(--chip);color:var(--muted)">持平</span>';
+  const cls=diff>0?'green':'red';
+  return `<span class="tag ${cls}">${diff>0?'↑':'↓'} ${Math.abs(diff).toFixed(1)}${unit||'分'}</span>`;
+}
+
+function renderTrend(){
+  const box=$('#gTrend');if(!box)return;
+  const exams=getTrendExams();
+
+  if(!exams.length){
+    box.innerHTML='<div class="empty"><div class="big">📉</div>暂无考试数据，请先在「成绩看板」创建考试并录入成绩</div>';
+    return;
+  }
+
+  const subjects=getTrendSubjects(exams);
+  const latest=exams[exams.length-1];
+  const stuOpts=DB.students.filter(s=>!s.archived).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+
+  box.innerHTML=`
+  <div class="grid-cards" style="margin-bottom:14px">
+    <div class="stat"><div class="num">${exams.length}</div><div class="lbl">考试场次</div></div>
+    <div class="stat"><div class="num">${subjects.length}</div><div class="lbl">科目数</div></div>
+    <div class="stat"><div class="num">${DB.students.filter(s=>!s.archived).length}</div><div class="lbl">在册学生</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-h">班级各科成绩趋势</div>
+    <div class="muted" style="margin-bottom:10px;font-size:12px">连「比上次进步还是退步」都标好了 · 选科目切换：</div>
+    <div class="row" id="trendSubjChips" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      ${subjects.map((s,i)=>`<button class="chip ${i===0?'active':''}" data-action="trend-subj" data-sub="${esc(s)}">${esc(s)}</button>`).join('')}
+    </div>
+    <div id="classCurve"></div>
+    <div class="trend-export-row">
+      <button class="btn" data-action="export-class-curve">↓ 导出班级成绩图（PNG）</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-h">全班成绩对比</div>
+    <div class="row" style="margin-bottom:10px;gap:10px;flex-wrap:wrap;align-items:center">
+      <span class="muted">考试场次：</span>
+      <select id="trendExamPick" style="min-width:200px">
+        ${exams.map(e=>`<option value="${e.id}" ${e.id===latest.id?'selected':''}>${esc(e.name)} · ${e.date}</option>`).join('')}
+      </select>
+      <span class="pill" id="trendExamMeta"></span>
+    </div>
+    <div class="muted" style="margin-bottom:8px;font-size:12px">自动算全班均分 · 分数段分布 · 绿≥85 / 黄≥60 / 红＜60</div>
+    <div id="classTable"></div>
+    <div class="trend-export-row">
+      <button class="btn" data-action="export-class-table">↓ 导出全班成绩（CSV）</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-h">学生个人成长曲线</div>
+    <div class="row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;align-items:center">
+      <span class="muted">选择学生：</span>
+      <select id="stuPick" style="min-width:200px">
+        <option value="">-- 请选择学生 --</option>
+        ${stuOpts}
+      </select>
+      <button class="btn" data-action="export-stu-curve" id="exportStuCurveBtn" disabled>↓ 导出个人曲线（PNG）</button>
+    </div>
+    <div class="muted" style="margin-bottom:10px;font-size:12px">把零散分数变成能看的图表</div>
+    <div id="stuArea">
+      <div class="empty"><div class="big">👤</div>选个学生查看他的各科成长曲线</div>
+    </div>
+  </div>`;
+
+  // 初始渲染
+  renderClassCurve(subjects[0]);
+  renderClassTable(latest);
+
+  // 绑定事件
+  box.querySelectorAll('[data-act=trend-subj]').forEach(b=>b.onclick=()=>{
+    box.querySelectorAll('[data-act=trend-subj]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    renderClassCurve(b.dataset.sub);
+  });
+  $('#stuPick').onchange=e=>renderStuArea(e.target.value);
+  $('#trendExamPick').onchange=e=>{
+    const ex=exams.find(x=>x.id===e.target.value);
+    renderClassTable(ex);
+  };
+
+  // 导出按钮
+  box.querySelector('[data-act=export-class-curve]').onclick=exportClassCurvePNG;
+  box.querySelector('[data-act=export-class-table]').onclick=exportClassTableCSV;
+  box.querySelector('[data-act=export-stu-curve]').onclick=exportStuCurvePNG;
+
+  // 表格姓名点击 → 直接跳到该学生个人成长曲线（事件委托，表格重渲染也生效）
+  attachStuGoto($('#classTable'));
+}
+
+/* 表格里 [data-act=stu-goto] 委托：点击姓名 → 跳到个人成长曲线
+   在 root（如 #classTable / #boardOut）上挂一次事件委托，root 内部任何 [data-act=stu-goto] 都触发
+   - 若当前页已有 #stuPick（成长曲线页）：直接选中学生+渲染
+   - 若没有（成绩看板页）：先切到成长曲线 tab 并 renderTrend，再选中学生 */
+function attachStuGoto(root){
+  if(!root || root.dataset.gotoBound)return;
+  root.addEventListener('click',e=>{
+    const a=e.target.closest('[data-act=stu-goto]');if(!a)return;
+    e.preventDefault();
+    const sid=a.dataset.sid;
+    const nameText=a.textContent.trim();
+    const doPick=()=>{
+      const pick=$('#stuPick');
+      if(!pick)return;
+      if(![...pick.options].some(o=>o.value===sid)){
+        const opt=document.createElement('option');opt.value=sid;opt.textContent=nameText;pick+opt;
+      }
+      pick.value=sid;
+      renderStuArea(sid);
+      const area=$('#stuArea');if(area)area.scrollIntoView({behavior:'smooth',block:'start'});
+    };
+    const pick=$('#stuPick');
+    if(pick){doPick();return;}
+    /* 跨页：切到成长曲线 tab 并触发 renderTrend，再选中学生 */
+    const trendTab=document.querySelector('[data-tab=trend]');
+    if(trendTab){
+      trendTab.click();
+      if(typeof renderTrend==='function')renderTrend();
+      setTimeout(doPick,60);
+    }
+  });
+  root.dataset.gotoBound='1';
+}
+
+function renderClassCurve(subj){
+  const box=$('#classCurve');if(!box)return;
+  const exams=getTrendExams();
+
+  // 计算每场考试该科目全班均分
+  const pts=exams.map(ex=>{
+    const arr=ex.students.map(s=>+(s.subjects[subj]||0)).filter(v=>v>0);
+    const avg=arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+    return {date:ex.date,name:ex.name,y:avg};
+  });
+
+  const latest=pts[pts.length-1];
+  const prev=pts[pts.length-2];
+  const badge=trendBadge(latest&&latest.y,prev&&prev.y);
+
+  box.innerHTML=`
+  <div class="row between" style="margin-bottom:8px;align-items:center">
+    <div style="font-size:18px;font-weight:700">${esc(subj)}</div>
+    <div>最新 ${latest?latest.y.toFixed(1):'--'} ${badge}</div>
+  </div>
+  <canvas id="classCurveCv" width="720" height="220"></canvas>
+  <div class="muted" style="margin-top:6px;font-size:12px">${pts.map(p=>`${p.date} 均分 ${p.y.toFixed(1)}`).join('  ·  ')}</div>`;
+
+  const cv=$('#classCurveCv');
+  drawLineChart(cv,[{label:subj,points:pts}],{yMin:0,yMax:100,xLabels:pts.map(p=>p.date)});
+}
+
+function renderClassTable(ex){
+  const box=$('#classTable');if(!box||!ex)return;
+
+  // 各科均分
+  const subjAvg={};
+  ex.subjects.forEach(s=>{
+    const arr=ex.students.map(x=>+(x.subjects[s]||0));
+    subjAvg[s]=arr.reduce((a,b)=>a+b,0)/arr.length;
+  });
+  const overallAvg=ex.subjects.reduce((a,s)=>a+subjAvg[s],0)/ex.subjects.length;
+
+  // 分数段分布
+  const buckets={'<60':0,'60-69':0,'70-79':0,'80-89':0,'≥90':0};
+  ex.students.forEach(s=>{
+    const t=ex.subjects.reduce((a,sub)=>a+(s.subjects[sub]||0),0);
+    const avg=t/ex.subjects.length;
+    if(avg<60)buckets['<60']++;
+    else if(avg<70)buckets['60-69']++;
+    else if(avg<80)buckets['70-79']++;
+    else if(avg<90)buckets['80-89']++;
+    else buckets['≥90']++;
+  });
+  const total=ex.students.length;
+
+  // 单元格颜色
+  const cellCls=v=>v>=85?'cell-good':v>=75?'':v>=60?'cell-mid':'cell-bad';
+
+  let html=`
+  <div class="row" style="margin-bottom:12px;gap:24px;flex-wrap:wrap;align-items:flex-end">
+    <div><div class="big-num">${overallAvg.toFixed(1)}</div><div class="big-num-lbl">全班均分（${esc(ex.name)}）</div></div>
+    <div class="muted" style="font-size:13px">${total} 人参考 · 满分 ${ex.subjects.length*100}</div>
+  </div>
+
+  <div class="row" style="margin-bottom:14px;gap:8px;flex-wrap:wrap">
+    ${Object.entries(buckets).map(([k,v])=>{
+      const cls=k==='<60'?'cell-bad':k==='≥90'?'cell-good':'';
+      const pct=total?(v/total*100):0;
+      return `<div style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border);border-radius:10px">
+        <span style="font-weight:700">${k}</span>
+        <span class="${cls}" style="padding:2px 8px;border-radius:6px">${v} 人</span>
+        <span class="muted" style="font-size:12px">${pct.toFixed(0)}%</span>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <div class="scroll-x"><table class="tb"><thead><tr>
+    <th>排名</th><th>姓名</th>
+    ${ex.subjects.map(s=>`<th>${esc(s)}<br><span class="muted" style="font-size:11px">均 ${subjAvg[s].toFixed(1)}</span></th>`).join('')}
+    <th>总分</th><th>均分</th>
+  </tr></thead><tbody>`;
+
+  // 按总分排序
+  const ranked=ex.students.slice().map(s=>{
+    const total=ex.subjects.reduce((a,sub)=>a+(s.subjects[sub]||0),0);
+    return {...s,_total:total,_avg:total/ex.subjects.length};
+  }).sort((a,b)=>b._total-a._total);
+
+  ranked.forEach((s,idx)=>{
+    html+=`<tr>
+      <td>${idx+1}</td>
+      <td><a href="#" class="stu-link" data-action="stu-goto" data-sid="${esc(s.id)}" title="点击查看该学生的个人成长曲线"><b>${esc(s.name)}</b></a></td>
+      ${ex.subjects.map(sub=>{
+        const v=s.subjects[sub]||0;
+        return `<td class="${cellCls(v)}">${v}</td>`;
+      }).join('')}
+      <td><b>${s._total}</b></td>
+      <td class="${cellCls(s._avg)}">${s._avg.toFixed(1)}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>`;
+
+  box.innerHTML=html;
+  const metaBox=$('#trendExamMeta');if(metaBox)metaBox.textContent=`${ex.subjects.length} 科 · ${total} 人`;
+}
+
+function renderStuArea(sid){
+  const box=$('#stuArea');const btn=$('#exportStuCurveBtn');
+  if(!sid){
+    box.innerHTML='<div class="empty"><div class="big">👤</div>选个学生查看他的各科成长曲线</div>';
+    if(btn)btn.disabled=true;
+    return;
+  }
+  if(btn)btn.disabled=false;
+  const stu=DB.students.find(s=>s.id===sid);
+  if(!stu){box.innerHTML='<div class="muted">学生不存在</div>';return;}
+  const exams=getTrendExams();
+  const subjects=getTrendSubjects(exams);
+
+  // 各科序列（按场次）
+  const series=subjects.map(subj=>{
+    const points=exams.map(ex=>{
+      const stEx=ex.students.find(x=>x.id===sid);
+      return {date:ex.date,name:ex.name,y:stEx?(+(stEx.subjects[subj]||0)||null):null};
+    }).filter(p=>p.y!==null);
+    return {subj,points};
+  }).filter(s=>s.points.length>0);
+
+  const initial=(stu.name||'?')[0];
+
+  let html=`
+  <div class="stu-header">
+    <div class="avatar">${esc(initial)}</div>
+    <div class="info">
+      <div class="nm">${esc(stu.name)}</div>
+      <div class="sub">已参加 ${exams.length} 场考试 · ${subjects.length} 个科目</div>
+    </div>
+  </div>
+  <div id="stuCurves">`;
+
+  series.forEach(({subj,points})=>{
+    const latest=points[points.length-1];
+    const prev=points[points.length-2];
+    html+=`
+    <div class="subj-curve-card">
+      <div class="row between" style="margin-bottom:8px;align-items:center">
+        <div style="font-size:16px;font-weight:700">${esc(subj)}</div>
+        <div>最新 ${latest?latest.y:'--'} ${trendBadge(latest&&latest.y,prev&&prev.y)}</div>
+      </div>
+      <canvas class="stu-cv" data-sub="${esc(subj)}" width="680" height="160"></canvas>
+      <div class="muted" style="margin-top:6px;font-size:12px">${points.map(p=>`${p.date} ${p.y}`).join('  ·  ')}</div>
+    </div>`;
+  });
+
+  html+=`</div>
+  <div class="section-h" style="margin-top:14px">${esc(stu.name)} · 历次成绩明细</div>
+  <div class="scroll-x"><table class="tb"><thead><tr><th>考试</th><th>日期</th>
+    ${subjects.map(s=>`<th>${esc(s)}</th>`).join('')}
+    <th>总分</th><th>均分</th>
+  </tr></thead><tbody>`;
+
+  exams.forEach(ex=>{
+    const stEx=ex.students.find(x=>x.id===sid);
+    if(!stEx)return;
+    const total=ex.subjects.reduce((a,sub)=>a+(stEx.subjects[sub]||0),0);
+    const avg=total/ex.subjects.length;
+    html+=`<tr>
+      <td>${esc(ex.name)}</td>
+      <td>${ex.date}</td>
+      ${subjects.map(sub=>{
+        const v=stEx.subjects[sub];
+        if(v==null)return '<td><span class="muted">-</span></td>';
+        const cls=v>=85?'cell-good':v>=75?'':v>=60?'cell-mid':'cell-bad';
+        return `<td class="${cls}">${v}</td>`;
+      }).join('')}
+      <td><b>${total}</b></td>
+      <td class="${avg>=85?'cell-good':avg>=60?'cell-mid':'cell-bad'}">${avg.toFixed(1)}</td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>`;
+
+  box.innerHTML=html;
+
+  // 绘制所有学生曲线
+  $$('.stu-cv',box).forEach(cv=>{
+    const subj=cv.dataset.sub;
+    const s=series.find(x=>x.subj===subj);
+    if(s)drawLineChart(cv,[{label:subj,points:s.points}],{yMin:0,yMax:100,xLabels:s.points.map(p=>p.date)});
+  });
+}
+
+// 导出函数
+function exportClassCurvePNG(){
+  const cv=$('#classCurveCv');
+  if(!cv){toast('暂无曲线可导出');return;}
+  const a=document.createElement('a');
+  a.href=cv.toDataURL('image/png');
+  const subj=document.querySelector('#trendSubjChips .chip.active')?.dataset.sub||'成绩';
+  a.download=`班级${subj}成绩曲线_${new Date().toISOString().slice(0,10)}.png`;
+  a.click();
+  toast('已导出班级成绩曲线');
+}
+function exportStuCurvePNG(){
+  const cv=$('#stuCurves .stu-cv');
+  if(!cv){toast('请先选择学生并查看曲线');return;}
+  const a=document.createElement('a');
+  a.href=cv.toDataURL('image/png');
+  const sid=$('#stuPick')?.value;
+  const stu=sid?DB.students.find(s=>s.id===sid):null;
+  const subj=cv.dataset.sub||'成绩';
+  const name=stu?stu.name+'·':'';
+  a.download=`${name}${subj}成长曲线_${new Date().toISOString().slice(0,10)}.png`;
+  a.click();
+  toast('已导出个人曲线');
+}
+function exportClassTableCSV(){
+  const ex=DB.exams.find(x=>x.id===$('#trendExamPick')?.value);
+  if(!ex){toast('请先选择一场考试');return;}
+  const ranked=ex.students.slice().map(s=>{
+    const total=ex.subjects.reduce((a,sub)=>a+(s.subjects[sub]||0),0);
+    return {s,total};
+  }).sort((a,b)=>b.total-a.total);
+  let csv='\uFEFF排名,姓名,'+ex.subjects.join(',')+',总分,均分\n';
+  ranked.forEach(({s,total},i)=>{
+    const avg=(total/ex.subjects.length).toFixed(1);
+    csv+=[i+1,JSON.stringify(s.name),...ex.subjects.map(sub=>s.subjects[sub]||0),total,avg].join(',')+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`${ex.name} 全班成绩.csv`;
+  a.click();URL.revokeObjectURL(url);
+  toast('已导出 CSV');
 }
 
 /* ============================================================
@@ -1918,12 +3198,12 @@ function openStats(){
   const pend=DB.todos.filter(t=>!t.done&&!t.archived).length;
   const don=DB.todos.filter(t=>t.done&&!t.archived).length;
   const stu=DB.students.filter(s=>!s.archived).length;
-  const ph=DB.phrases.length;const ex=DB.exams.length;const ct=DB.contacts.length;
+  const ph=DB.phrases.length;const ex=DB.exams.length;
   const ec=DB.emergency.contacts.length;
   const rows=[['工作待办(未完成)',pend,'var(--primary)'],['工作待办(已完成)',don,'var(--success)'],
     ['在册学生',stu,'var(--info)'],['话术库',ph,'var(--warn)'],['考试记录',ex,'var(--primary)'],
-    ['家校联系',ct,'var(--info)'],['应急联系人',ec,'var(--danger)']];
-  const max=Math.max(pend,don,stu,ph,ex,ct,ec,1);
+    ['应急联系人',ec,'var(--danger)']];
+  const max=Math.max(pend,don,stu,ph,ex,ec,1);
   openModal(`<h3>📊 工作台数据概览</h3>
     <div class="list">${rows.map(r=>`<div class="item"><div class="it-main" style="flex:1">
       <div class="bar-lbl"><span>${r[0]}</span><span>${r[1]}</span></div>
@@ -2052,10 +3332,10 @@ document.addEventListener('click',e=>{
 
   /* ---- 话术 ---- */
   if(act==='ph-add'||act==='ct-ph-add'){openPhModal();return;}
-  if(act==='fav'){const id=el.closest('.item').dataset.id;const p=DB.phrases.find(x=>x.id===id);p.fav=!p.fav;save();renderPhList();renderCtPhList();renderQuickPhrases();renderPhMList();return;}
+  if(act==='fav'){const id=el.closest('.item').dataset.id;const p=DB.phrases.find(x=>x.id===id);p.fav=!p.fav;save();renderPhList();renderQuickPhrases();renderPhMList();return;}
   if(act==='copy'){const id=el.closest('.item').dataset.id;const p=DB.phrases.find(x=>x.id===id);if(p)copyText(p.content);return;}
-  if(act==='ph-del'){const id=el.closest('.item').dataset.id;DB.phrases=DB.phrases.filter(x=>x.id!==id);save();renderPhList();renderCtPhList();renderQuickPhrases();renderPhMList();return;}
-  if(act==='ph-fav-filter'||act==='ct-ph-fav'){phFavOnly=!phFavOnly;renderPhList();renderCtPhList();renderPhMList();return;}
+  if(act==='ph-del'){const id=el.closest('.item').dataset.id;DB.phrases=DB.phrases.filter(x=>x.id!==id);save();renderPhList();renderQuickPhrases();renderPhMList();return;}
+  if(act==='ph-fav-filter'){phFavOnly=!phFavOnly;renderPhList();renderPhMList();return;}
 
   /* ---- AI ---- */
   if(act==='ai-gen'){aiGenerate();return;}
@@ -2063,7 +3343,7 @@ document.addEventListener('click',e=>{
   if(act==='ai-save'){
     const out=$('#aiOut').value.trim();if(!out){toast('请先生成内容');return;}
     DB.phrases.push({id:uid(),title:$('#aiType').value+' · '+($('#aiDesc').value.trim().slice(0,12)||'生成'),content:out,tags:['其他'],fav:false,createdAt:Date.now()});
-    save();renderPhList();renderCtPhList();renderQuickPhrases();renderPhMList();toast('已保存到话术库');return;
+    save();renderPhList();renderQuickPhrases();renderPhMList();toast('已保存到话术库');return;
   }
   if(act==='quick-ph'||el.dataset.ph){
     const id=el.dataset.ph;if(id){const p=DB.phrases.find(x=>x.id===id);if(p)copyText(p.content);}return;
@@ -2080,29 +3360,98 @@ document.addEventListener('click',e=>{
   /* ---- 学生 ---- */
   if(act==='st-add'){openStModal();return;}
   if(act==='st-import'){openStImport();return;}
+  if(act==='st-tpl'){downloadStudentTemplate();return;}
   if(act==='st-import-sample'){importSampleStudents();return;}
-  if(act==='st-edit'){openStModal(el.dataset.id);return;}
-  if(act==='st-archive'){const s=DB.students.find(x=>x.id===el.dataset.id);s.archived=true;save();renderStList();return;}
-  if(act==='st-del'){DB.students=DB.students.filter(x=>x.id!==el.dataset.id);save();renderStList();return;}
-
-  /* ---- 座位 ---- */
-  if(act==='seat-apply'){DB.seats.rows=Math.max(1,+($('#seatR').value)||8);DB.seats.cols=Math.max(1,+($('#seatC').value)||8);save();renderSeatGrid();renderSeatPool();return;}
-  if(act==='seat-clear'){DB.seats.layout={};save();renderSeatGrid();renderSeatPool();return;}
-  if(act==='seat-auto'){
-    const active=DB.students.filter(s=>!s.archived);
-    if(!active.length){toast('请先在学生档案添加学生');return;}
-    DB.seats.layout={};
-    let i=0;
-    for(let r=0;r<DB.seats.rows && i<active.length;r++)for(let c=0;c<DB.seats.cols && i<active.length;c++){DB.seats.layout[r+'-'+c]=active[i++].id;}
-    save();renderSeatGrid();renderSeatPool();toast('已按顺序自动排座');return;
+  if(act==='st-edit'){openStModal(el.dataset.id);closeStuMenu();return;}
+  if(act==='st-archive'){const s=DB.students.find(x=>x.id===el.dataset.id);s.archived=true;stSel.delete(s.id);save();renderStList();closeStuMenu();return;}
+  if(act==='st-del'){DB.students=DB.students.filter(x=>x.id!==el.dataset.id);stSel.delete(el.dataset.id);save();renderStList();if(typeof renderSeatPool==='function')renderSeatPool();closeStuMenu();return;}
+  if(act==='st-sel'){const id=el.dataset.id;if(stSel.has(id))stSel.delete(id);else stSel.add(id);renderStList();return;}
+  if(act==='st-sel-all'){const q=($('#stSearch')?.value||'').toLowerCase();DB.students.filter(s=>!s.archived&&(!q||(s.name+s.no).toLowerCase().includes(q))).forEach(s=>stSel.add(s.id));renderStList();return;}
+  if(act==='st-sel-none'){stSel.clear();renderStList();return;}
+  if(act==='st-actmenu'){openStuMenu(el);return;}
+  if(act==='st-del-multi'){
+    if(!stSel.size){toast('请先勾选要删除的学生');return;}
+    const n=stSel.size;
+    if(!confirm('确定删除选中的 '+n+' 名学生吗？此操作不可撤销。'))return;
+    DB.students=DB.students.filter(x=>!stSel.has(x.id));
+    stSel.clear();save();renderStList();
+    if(typeof renderSeatPool==='function')renderSeatPool();
+    toast('已删除 '+n+' 名学生');return;
+  }
+  if(act==='st-clear-all'){
+    // 当前班级（all=全部）一键清空：学生 + 关联考勤/成绩/座位
+    const target=curCls;
+    const targetLabel=target==='all'?'所有班级':clsLabel(target);
+    const toDel=DB.students.filter(s=>!s.archived && (target==='all' || stuCls(s)===target));
+    if(!toDel.length){toast(targetLabel+' 暂无可清除的学生');return;}
+    if(!confirm('确定清空「'+targetLabel+'」的全部 '+toDel.length+' 名学生吗？\n\n将同时清理这些学生的考勤记录、考试成绩与座位安排，此操作不可撤销。'))return;
+    const delIds=new Set(toDel.map(s=>s.id));
+    // 1) 移除学生
+    DB.students=DB.students.filter(s=>!delIds.has(s.id));
+    // 2) 清考勤里这些 id
+    if(Array.isArray(DB.attendance)){
+      DB.attendance.forEach(a=>{
+        ['present','late','absent'].forEach(k=>{a[k]=(a[k]||[]).filter(x=>!delIds.has(x));});
+      });
+    }
+    // 3) 清考试里这些 sid 的成绩（保持 exam 本身保留）
+    if(Array.isArray(DB.exams)){
+      DB.exams.forEach(ex=>{
+        if(Array.isArray(ex.results)){
+          ex.results=ex.results.filter(r=>!delIds.has(r.sid));
+        }
+      });
+    }
+    // 4) 清座位布局（被删学生在 seats.layouts 中的映射会被自然丢弃）
+    if(DB.seats && DB.seats.layouts){
+      Object.keys(DB.seats.layouts).forEach(cid=>{
+        const L=DB.seats.layouts[cid];
+        if(L && typeof L==='object'){
+          Object.keys(L).forEach(k=>{if(delIds.has(L[k]))delete L[k];});
+        }
+      });
+    }
+    // 5) 清多选
+    stSel.clear();
+    save();
+    renderStList();
+    if(typeof renderSeatGrid==='function')renderSeatGrid();
+    if(typeof renderSeatPool==='function')renderSeatPool();
+    if(typeof renderHomeStu==='function')renderHomeStu();
+    toast('已清空 '+targetLabel+' 共 '+delIds.size+' 名学生');
+    return;
   }
 
-  /* ---- 值日 ---- */
-  if(act==='duty-save-groups'){DB.duty.groups=($('#dutyGroups').value||'').split(',').map(s=>s.trim()).filter(Boolean);DB.duty.schedule={};save();renderDuty();toast('已保存');return;}
-
-  /* ---- 家校联系 ---- */
-  if(act==='ct-add'){openCtModal();return;}
-  if(act==='ct-del'){DB.contacts=DB.contacts.filter(x=>x.id!==el.dataset.id);save();renderCtList();return;}
+  /* ---- 座位 ---- */
+  if(act==='seat-apply'){
+    DB.seats.rows=Math.max(1,+($('#seatR').value)||8);
+    DB.seats.cols=Math.max(1,+($('#seatC').value)||8);
+    if(!DB.seats.corridors)DB.seats.corridors=[];
+    DB.seats.corridors=DB.seats.corridors.filter(p=>p>=0 && p<DB.seats.cols-1);
+    if(!DB.seats.podiums)DB.seats.podiums=[];
+    DB.seats.podiums=DB.seats.podiums.filter(p=>p>=-1 && p<=DB.seats.rows-1);
+    save();renderSeatGrid();renderSeatPool();return;
+  }
+  if(act==='seat-add-corridor'){addCorridor();save();renderSeatGrid();renderSeatPool();return;}
+  if(act==='seat-del-corridor'){const pos=parseInt(el.dataset.pos,10);if(!isNaN(pos))DB.seats.corridors=DB.seats.corridors.filter(p=>p!==pos);save();renderSeatGrid();renderSeatPool();return;}
+  if(act==='seat-add-podium'){addPodium();save();renderSeatGrid();renderSeatPool();return;}
+  if(act==='seat-del-podium'){const pos=parseInt(el.dataset.pos,10);if(!isNaN(pos))DB.seats.podiums=DB.seats.podiums.filter(p=>p!==pos);save();renderSeatGrid();renderSeatPool();return;}
+  if(act==='seat-clear'){const L=curSeatLayout();for(const k in L)delete L[k];save();renderSeatGrid();renderSeatPool();return;}
+  if(act==='seat-auto'){
+    const active=DB.students.filter(s=>!s.archived && stuCls(s)===curCls);
+    if(!active.length){toast('当前班级还没有学生，请先在学生档案添加');return;}
+    const L=curSeatLayout();for(const k in L)delete L[k];
+    renderSeatGrid(); // 让 applyBlockedOverlay 先打好标记（此时 L 已空,不会清学生）
+    renderSeatPool();
+    const blocked=new Set();
+    const g2=$('#seatGrid');
+    if(g2)g2.querySelectorAll('.seat.blocked[data-key]').forEach(s=>blocked.add(s.dataset.key));
+    let i=0;
+    for(let r=0;r<DB.seats.rows && i<active.length;r++)for(let c=0;c<DB.seats.cols && i<active.length;c++){
+      const key=r+'-'+c;if(blocked.has(key))continue;L[key]=active[i++].id;
+    }
+    save();renderSeatGrid();renderSeatPool();toast('已自动排座（已避开讲台）');return;
+  }
 
   /* ---- 知识点 ---- */
   if(act==='k-add'){openKModal();return;}
@@ -2116,18 +3465,27 @@ document.addEventListener('click',e=>{
   /* ---- 考勤 ---- */
   if(act==='at-load'){loadAtList();return;}
   if(act==='at-set'){
-    const id=el.dataset.id,st=el.dataset.st;
+    const id=el.dataset.id;
+    // 单元格整体点击（不是快捷按钮）→ 循环：出勤 → 迟到 → 缺席 → 出勤
+    // 快捷按钮 qb 点击 → 直接设为该状态
+    let st;
+    if(e.target.closest && e.target.closest('.qb')){
+      st=el.dataset.st; // el 在这里就是 qb
+    }else{
+      const cur=atState.absent.includes(id)?'absent':atState.late.includes(id)?'late':'present';
+      st=cur==='present'?'late':cur==='late'?'absent':'present';
+    }
     atState.present=atState.present.filter(x=>x!==id);atState.late=atState.late.filter(x=>x!==id);atState.absent=atState.absent.filter(x=>x!==id);
     atState[st==='present'?'present':st==='late'?'late':'absent'].push(id);loadAtList();return;
   }
   if(act==='at-save'){
     if(!atState.date){toast('请先选择日期');return;}
-    const ex=DB.attendance.find(a=>a.date===atState.date);
-    const rec={date:atState.date,present:atState.present,late:atState.late,absent:atState.absent};
+    const ex=DB.attendance.find(a=>a.date===atState.date && a.cls===curCls);
+    const rec={date:atState.date,cls:curCls,present:atState.present,late:atState.late,absent:atState.absent};
     if(ex){Object.assign(ex,rec);}else DB.attendance.push(rec);
     save();renderAtHistory();toast('考勤已保存');return;
   }
-  if(act==='at-del'){DB.attendance=DB.attendance.filter(a=>a.date!==el.dataset.id);save();renderAtHistory();return;}
+  if(act==='at-del'){DB.attendance=DB.attendance.filter(a=>!(a.date===el.dataset.id && a.cls===el.dataset.cls));save();renderAtHistory();return;}
 
   /* ---- 归档 ---- */
   if(act==='arch-restore-todo'){DB.todos.find(x=>x.id===el.dataset.id).archived=false;save();renderArchive();return;}
@@ -2143,8 +3501,160 @@ document.addEventListener('click',e=>{
 
   /* ---- 成绩看板 ---- */
   if(act==='ex-add'){createExam();return;}
-  if(act==='ex-view'){const ex=DB.exams.find(x=>x.id===el.dataset.id);renderBoardOut(ex);toast('已加载看板');return;}
-  if(act==='ex-del'){DB.exams=DB.exams.filter(x=>x.id!==el.dataset.id);save();renderExList();$('#boardOut').innerHTML='';return;}
+  if(act==='ex-view'){
+    const ex=DB.exams.find(x=>x.id===el.dataset.id);
+    const box=$('#boardOut');
+    /* 已经在看这场 → 点击收起 */
+    if(box && box.dataset.examId===ex.id){
+      box.innerHTML='';
+      delete box.dataset.examId;
+      renderExList();
+      toast('已收起看板');return;
+    }
+    /* 切到另一场 → 渲染新看板 */
+    renderBoardOut(ex);
+    if(box)box.dataset.examId=ex.id;
+    renderExList();
+    toast('已加载看板');
+    /* 平滑滚到看板顶部 */
+    if(box)box.scrollIntoView({behavior:'smooth',block:'start'});
+    return;
+  }
+  if(act==='ex-collapse'){
+    const box=$('#boardOut');
+    if(box){box.innerHTML='';delete box.dataset.examId;}
+    renderExList();
+    toast('已收起看板');
+    return;
+  }
+  if(act==='ex-del'){DB.exams=DB.exams.filter(x=>x.id!==el.dataset.id);save();renderExList();const bx=$('#boardOut');if(bx){bx.innerHTML='';delete bx.dataset.examId;}return;}
+  /* ---- 分层学情：点击切换展开 ---- */
+  if(act==='layer-toggle'){
+    const layer=el.dataset.layer;
+    const detail=$(`#layerDetail-${layer}`);
+    if(!detail)return;
+    const willShow=detail.hasAttribute('hidden');
+    /* 先收起所有 */
+    $$('.layer-detail').forEach(d=>d.setAttribute('hidden',''));
+    $$('.layer-card').forEach(c=>c.classList.remove('active'));
+    if(willShow){
+      detail.removeAttribute('hidden');
+      el.classList.add('active');
+      detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }
+    return;
+  }
+  /* ---- 成绩看板：点击"科目 chip"展开低于均分的学生 ---- */
+  if(act==='weak-show'){
+    e.preventDefault();
+    const subj=el.dataset.subj;
+    const detail=$('#weakDetail');
+    if(!detail)return;
+    const willShow=detail.hasAttribute('hidden') || detail.dataset.subj!==subj;
+    /* 收起所有 chip 高亮 */
+    $$('.weak-chip').forEach(c=>{c.classList.remove('active');});
+    detail.hidden=true;
+    detail.innerHTML='';
+    if(willShow){
+      window.renderWeakDetail(subj);
+      detail.dataset.subj=subj;
+      el.classList.add('active');
+      detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }else{
+      delete detail.dataset.subj;
+    }
+    return;
+  }
+  if(act==='weak-hide'){
+    const detail=$('#weakDetail');if(detail){detail.hidden=true;detail.innerHTML='';delete detail.dataset.subj;}
+    $$('.weak-chip').forEach(c=>c.classList.remove('active'));
+    return;
+  }
+  /* ---- 强弱判定标准：重置全部为 85 / 60 ---- */
+  if(act==='rule-reset'){
+    RULES={default:{strong:85,weak:60},perSubject:{}};saveRules();
+    const rs=$('#ruleStrong'),rw=$('#ruleWeak');
+    if(rs)rs.value=85;if(rw)rw.value=60;
+    /* 全清每个学科行 */
+    $$('#rulePerSubj .rule-row').forEach(row=>{
+      const sInp=row.querySelector('input.rule-per-s');
+      const wInp=row.querySelector('input.rule-per-w');
+      if(sInp)sInp.value=85;
+      if(wInp)wInp.value=60;
+      row.style.borderColor='var(--border)';
+      row.style.background='var(--card)';
+    });
+    const ex=DB.exams.find(x=>x.id===($('#boardOut').dataset.examId||''));
+    if(ex)renderBoardOut(ex);
+    toast('已恢复全部为默认 85 / 60');
+    return;
+  }
+  /* ---- 强弱判定标准：单科重置为默认 ---- */
+  if(act==='rule-subj-reset'){
+    const subj=el.dataset.subj;
+    if(subj){
+      delete RULES.perSubject[subj];
+      saveRules();
+    }
+    /* 把该行所有 input 同步回 default */
+    const row=el.closest('.rule-row');
+    if(row){
+      const sInp=row.querySelector('input.rule-per-s');
+      const wInp=row.querySelector('input.rule-per-w');
+      if(sInp)sInp.value=RULES.default.strong;
+      if(wInp)wInp.value=RULES.default.weak;
+      row.style.borderColor='var(--border)';
+      row.style.background='var(--card)';
+    }
+    const ex=DB.exams.find(x=>x.id===($('#boardOut').dataset.examId||''));
+    if(ex)renderBoardOut(ex);
+    toast(`「${subj}」已恢复为默认 ${RULES.default.strong}/${RULES.default.weak}`);
+    return;
+  }
+  /* ---- 新增：科目 chip / 模板 / Excel 上传 ---- */
+  if(act==='ex-subj-add'){
+    const selVal=$('#exSubjSelect').value.trim();
+    if(!selVal){toast('请从下拉选要添加的科目');return;}
+    addExSubject(selVal);
+    /* 重设下拉：未选的常用科目在前，已选的置后但仍可再点选 */
+    const used=new Set(getExSubjects());
+    $('#exSubjSelect').innerHTML='<option value="">+ 添加科目…</option>'
+      +[...SHANDONG_COURSES.filter(s=>!used.has(s)),...SHANDONG_COURSES.filter(s=>used.has(s))]
+        .map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    $('#exSubjSelect').value='';
+    const warn=$('#exSubjWarn');if(warn)warn.style.display='none';
+    return;
+  }
+  if(act==='ex-tpl'){downloadExamTemplate();return;}
+  if(act==='ex-upload'){
+    const name=$('#exName').value.trim();
+    const date=$('#exDate').value;
+    if(!name){toast('请先填写考试名称');return;}
+    const stu=DB.students.filter(s=>!s.archived);
+    if(!stu.length){
+      toast('还没有学生，请先录入学生');
+      showView('students');             // 跳到学生档案页
+      setTimeout(()=>openStModal(),300); // 自动弹出"新增学生"
+      return;
+    }
+    /* 同名同日检查（按班级分别判断） */
+    const dStr=date||new Date().toISOString().slice(0,10);
+    if(DB.exams.some(e=>e.name===name&&e.date===dStr&&e.cls===curCls)){toast(`${clsLabel(curCls)} 已有「${name}」同日期的考试`);return;}
+    /* 直接弹文件选择，由 importExamFromExcel 自动创建考试并识别科目 */
+    const tmpId='tmp-excel-uid';   // 占位，importExamFromExcel 里创建真实考试后赋 eid
+    const fileSel=$('#exExcelFile');
+    fileSel.dataset.exName=name;fileSel.dataset.exDate=dStr;fileSel.dataset.exTmp=tmpId;
+    fileSel.click();
+    return;
+  }
+  if(act==='ex-ed-tpl'){
+    const ex=DB.exams.find(x=>x.id===el.dataset.eid);
+    if(!ex){toast('找不到这场考试');return;}
+    const ws=XLSX.utils.aoa_to_sheet([['姓名',...ex.subjects],...ex.students.map(s=>[s.name,...ex.subjects.map(_=>'')])]);
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'成绩');
+    XLSX.writeFile(wb,`${ex.name}-导入模板.xlsx`);toast('模板已下载');
+    return;
+  }
 
   /* ---- 弹窗关闭 ---- */
   if(act==='close-modal'){closeModal();return;}
@@ -2153,10 +3663,8 @@ document.addEventListener('click',e=>{
 /* 输入监听（搜索/筛选/知识点输入） */
 document.addEventListener('input',e=>{
   if(e.target.id==='phSearch'){phQ=e.target.value;renderPhList();}
-  else if(e.target.id==='ctPhSearch'){renderCtPhList();}
   else if(e.target.id==='phMSearch'){renderPhMList();}
   else if(e.target.id==='stSearch'){renderStList();}
-  else if(e.target.id==='ctSearch'){renderCtList();}
   else if(e.target.id==='atQuick'){const v=e.target.value;if(v){const active=DB.students.filter(s=>!s.archived).map(s=>s.id);
     atState.present=v==='present'?active.slice():[];atState.late=v==='late'?active.slice():[];atState.absent=v==='absent'?active.slice():[];
     if(v!=='present')atState.present=[];loadAtList();e.target.value='';}}
@@ -2167,8 +3675,7 @@ document.addEventListener('input',e=>{
 /* 分类 chip 点击 */
 document.addEventListener('click',e=>{
   const chip=e.target.closest('[data-cat]');if(chip){phCat=chip.dataset.cat;
-    renderPhCats();renderPhList();$('#ctPhCats')&&($('#ctPhCats').innerHTML=DB.phraseCats.map(c=>`<span class="chip ${c===phCat?'active':''}" data-cat="${esc(c)}">${esc(c)}</span>`).join(''));renderCtPhList();
-    renderPhMCats();renderPhMList();return;}
+    renderPhCats();renderPhList();renderPhMCats();renderPhMList();return;}
   const flt=e.target.closest('[data-filter]');if(flt){$$('#v_home .chip[data-filter]').forEach(c=>c.classList.remove('active'));flt.classList.add('active');renderTodoList(flt.dataset.filter);return;}
   const qp=e.target.closest('[data-ph]');if(qp){const p=DB.phrases.find(x=>x.id===qp.dataset.ph);if(p)copyText(p.content);return;}
 });
@@ -2176,14 +3683,15 @@ document.addEventListener('click',e=>{
 /* 座位点击分配 */
 document.addEventListener('click',e=>{
   const seat=e.target.closest('.seat[data-key]');if(!seat)return;
-  const key=seat.dataset.key;const active=DB.students.filter(s=>!s.archived);
-  if(!active.length){toast('请先在学生档案添加学生');return;}
-  const cur=DB.seats.layout[key];
+  if(curCls==='all')curCls='1';
+  const key=seat.dataset.key;const active=DB.students.filter(s=>!s.archived && stuCls(s)===curCls);
+  if(!active.length){toast('当前班级还没有学生');return;}
+  const L=curSeatLayout();const cur=L[key];
   openModal(`<h3>分配座位</h3>
     <div class="field"><label>选择学生</label>
     <select id="seatSel"><option value="">（空座位）</option>${active.map(s=>`<option value="${s.id}" ${s.id===cur?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
     <div class="actions"><button class="btn" data-action="close-modal">取消</button><button class="btn primary" id="seatOk">确定</button></div>`);
-  $('#seatOk').onclick=()=>{const v=$('#seatSel').value;if(v)DB.seats.layout[key]=v;else delete DB.seats.layout[key];save();closeModal();renderSeatGrid();};
+  $('#seatOk').onclick=()=>{const v=$('#seatSel').value;const L2=curSeatLayout();if(v)L2[key]=v;else delete L2[key];save();closeModal();renderSeatGrid();renderSeatPool();};
 });
 
 /* 填充示例课表（山东初中典型安排） */
@@ -2296,15 +3804,17 @@ function openPhModal(){
     const tags=$('#phMTags').value.split(',').map(s=>s.trim()).filter(Boolean);
     DB.phrases.push({id:uid(),title,content,tags:tags.length?tags:['其他'],fav:false,createdAt:Date.now()});
     tags.forEach(t=>{if(!DB.phraseCats.includes(t))DB.phraseCats.push(t);});
-    save();closeModal();renderPhList();renderCtPhList();renderPhCats();renderQuickPhrases();renderPhMCats();renderPhMList();toast('已保存');};
+    save();closeModal();renderPhList();renderPhCats();renderQuickPhrases();renderPhMCats();renderPhMList();toast('已保存');};
 }
 function openStModal(id){
   const s=id?DB.students.find(x=>x.id===id):null;
+  const defCls=(curCls!=='all'?curCls:(s?s.cls:'1'));
   openModal(`<h3>${s?'编辑学生':'新增学生'}</h3>
     <div class="field"><label>姓名</label><input id="stMName" value="${s?esc(s.name):''}"></div>
     <div class="row">
       <div class="field" style="flex:1"><label>学号</label><input id="stMNo" value="${s?esc(s.no||''):''}"></div>
       <div class="field" style="flex:1"><label>性别</label><select id="stMSex"><option ${s&&s.gender==='男'?'selected':''}>男</option><option ${s&&s.gender==='女'?'selected':''}>女</option></select></div>
+      <div class="field" style="flex:1"><label>班级</label><select id="stMCls"><option value="1" ${defCls==='1'?'selected':''}>1班</option><option value="2" ${defCls==='2'?'selected':''}>2班</option></select></div>
     </div>
     <div class="row">
       <div class="field" style="flex:1"><label>联系电话</label><input id="stMPhone" value="${s?esc(s.phone||''):''}"></div>
@@ -2313,27 +3823,14 @@ function openStModal(id){
     <div class="field"><label>备注</label><textarea id="stMNotes" rows="3">${s?esc(s.notes||''):''}</textarea></div>
     <div class="actions"><button class="btn" data-action="close-modal">取消</button><button class="btn primary" id="stMSave">保存</button></div>`);
   $('#stMSave').onclick=()=>{const name=$('#stMName').value.trim();if(!name){toast('请填写姓名');return;}
-    const data={name,no:$('#stMNo').value.trim(),gender:$('#stMSex').value,phone:$('#stMPhone').value.trim(),parent:$('#stMParent').value.trim(),notes:$('#stMNotes').value.trim()};
+    const data={name,no:$('#stMNo').value.trim(),cls:$('#stMCls').value,gender:$('#stMSex').value,phone:$('#stMPhone').value.trim(),parent:$('#stMParent').value.trim(),notes:$('#stMNotes').value.trim()};
     if(s){Object.assign(s,data);}else{DB.students.push(Object.assign({id:uid(),archived:false},data));}
     save();closeModal();renderStList();toast('已保存');};
 }
 function importSampleStudents(){
   const names=['张伟','王芳','李娜','刘洋','陈静','杨帆','赵磊','黄敏','周杰','吴婷','徐强','孙丽','马超','朱琳','胡军','郭涛'];
-  names.forEach((n,i)=>{if(!DB.students.find(s=>s.name===n))DB.students.push({id:uid(),name:n,no:'2026'+String(i+1).padStart(2,'0'),gender:i%2?'女':'男',phone:'',parent:'',notes:'',archived:false});});
-  save();renderStList();toast('已填充 '+names.length+' 名示例学生');
-}
-function openCtModal(){
-  const students=DB.students.filter(s=>!s.archived);
-  openModal(`<h3>新增联系记录</h3>
-    <div class="field"><label>学生</label><select id="ctMStu">${students.map(s=>`<option value="${s.name}">${esc(s.name)}</option>`).join('')||'<option>无</option>'}</select></div>
-    <div class="field"><label>类型</label><select id="ctMType"><option>电话沟通</option><option>微信沟通</option><option>家访</option><option>家长会</option><option>面谈</option></select></div>
-    <div class="field"><label>日期</label><input id="ctMDate" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
-    <div class="field"><label>内容</label><textarea id="ctMContent" rows="4"></textarea></div>
-    <div class="field"><label>跟进事项</label><input id="ctMFollow" placeholder="可选"></div>
-    <div class="actions"><button class="btn" data-action="close-modal">取消</button><button class="btn primary" id="ctMSave">保存</button></div>`);
-  $('#ctMSave').onclick=()=>{const student=$('#ctMStu').value;const content=$('#ctMContent').value.trim();if(!content){toast('请填写内容');return;}
-    DB.contacts.push({id:uid(),student,type:$('#ctMType').value,date:$('#ctMDate').value,content,followup:$('#ctMFollow').value.trim()});
-    save();closeModal();renderCtList();toast('已保存');};
+  names.forEach((n,i)=>{if(!DB.students.find(s=>s.name===n))DB.students.push({id:uid(),name:n,no:'2026'+String(i+1).padStart(2,'0'),cls:'1',gender:i%2?'女':'男',phone:'',parent:'',notes:'',archived:false});});
+  save();renderStList();toast('已填充 '+names.length+' 名示例学生（1班）');
 }
 function openKModal(){
   openModal(`<h3>新增知识点</h3>
@@ -2386,21 +3883,168 @@ function openSchHeadModal(){
     DB.schedule.days=$('#schD').value.split(',').map(s=>s.trim()).filter(Boolean);DB.schedule.grid={};save();closeModal();renderSchedule();toast('已保存');};
 }
 
-/* 创建考试并录入 */
+/* 创建考试并录入（科目由已选 chip 列表决定） */
 function createExam(){
-  const name=$('#exName').value.trim();const date=$('#exDate').value;
-  const subjects=$('#exSubjects').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const name=$('#exName').value.trim();
+  const date=$('#exDate').value;
+  const subjects=($('#exSubjects').value||'').split('|').map(s=>s.trim()).filter(Boolean);
   if(!name){toast('请填写考试名称');return;}
-  if(!subjects.length){toast('请填写至少一个科目');return;}
-  const students=DB.students.filter(s=>!s.archived);
-  if(!students.length){toast('请先在学生档案添加学生');return;}
-  const ex={id:uid(),paper:false,name,date:date||new Date().toISOString().slice(0,10),subjects,students:students.map(s=>({id:s.id,name:s.name,subjects:{},total:0}))};
+  if(!subjects.length){const warn=$('#exSubjWarn');if(warn){warn.textContent='请至少选 1 个科目（从下方"添加科目"下拉里选）';warn.style.display='block';}return;}
+  const cls=curCls==='all'?defaultClsId():curCls;
+  const students=DB.students.filter(s=>!s.archived && stuCls(s)===cls);
+  if(!students.length){toast('当前班级还没有学生，请先在学生档案添加');return;}
+  const ex={id:uid(),paper:false,name,date:date||new Date().toISOString().slice(0,10),cls,subjects,students:students.map(s=>({id:s.id,name:s.name,subjects:{},total:0}))};
   DB.exams.push(ex);save();
   renderExEditor(ex);
+}
+
+/* 科目 chip 数组（页面级单例） */
+function getExSubjects(){
+  return ($('#exSubjects')?.value||'').split('|').map(s=>s.trim()).filter(Boolean);
+}
+function setExSubjects(list){
+  $('#exSubjects').value=list.join('|');
+  const box=$('#exSubjectsBox');if(!box)return;
+  if(!list.length){box.innerHTML='<span class="subj-empty">还没有选科目，请从下方下拉选</span>';return;}
+  box.innerHTML=list.map((s,i)=>`<span class="subj-chip" data-idx="${i}">${esc(s)}<b title="移除" data-rm="${esc(s)}">×</b></span>`).join('');
+  box.querySelectorAll('[data-rm]').forEach(b=>{b.onclick=(e)=>{e.stopPropagation();removeExSubject(b.dataset.rm);};});
+}
+function addExSubject(s){
+  if(!s)return;
+  const list=getExSubjects();
+  if(list.includes(s)){toast('科目「'+s+'」已存在');return;}
+  list.push(s);setExSubjects(list);
+}
+function removeExSubject(s){
+  setExSubjects(getExSubjects().filter(x=>x!==s));
+}
+
+/* 下载 Excel 模板（按当前已选 chip + DB.students 姓名预填空行） */
+function downloadExamTemplate(){
+  const subjects=getExSubjects();
+  if(!subjects.length){toast('请先选至少 1 个科目');return;}
+  const cls=curCls==='all'?defaultClsId():curCls;
+  const names=DB.students.filter(s=>!s.archived && stuCls(s)===cls).map(s=>s.name);
+  const ws=XLSX.utils.aoa_to_sheet([['姓名',...subjects],...names.map(n=>[n,...subjects.map(_=>'')])]);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'成绩');
+  XLSX.writeFile(wb,`成绩导入模板-${new Date().toISOString().slice(0,10)}.xlsx`);
+  toast('模板已下载，按姓名填写分数即可');
+}
+
+/* 从 Excel 解析后灌入已创建的考试 ex.students[i].subjects */
+async function importExamFromExcel(ex,file){
+  if(!file){return;}
+  try{
+    if(typeof XLSX==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array'});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    if(!rows.length){toast('Excel 是空的');return;}
+    /* 智能识别表头：扫描前 6 行，找到第一个含"姓名"或 ≥2 个已知科目的行视为表头
+       兼容形如：
+         第1行 大标题（"莱芜区2023年小学...考生成绩表"）
+         第2行 副标题（"单位：XX学校..."）
+         第3行 真正的列表头（"学校/班级/考号/姓名/总分/语文/数学/英语/科学/道法"）
+    */
+    const trimCell=c=>String(c||'').trim();
+    let header=null,headerRow=0;
+    const SCAN_HEAD=6;
+    for(let r=0;r<Math.min(SCAN_HEAD,rows.length);r++){
+      const cells=rows[r].map(trimCell);
+      const hasNameCell=cells.some(c=>c==='姓名'||c==='学生姓名'||c==='名字'||c.toLowerCase()==='name');
+      const knownHits=cells.filter(c=>SHANDONG_COURSES.includes(c)).length;
+      if(hasNameCell || knownHits>=2){header=cells;headerRow=r;break;}
+    }
+    const start=header?headerRow+1:0;
+    /* 无表头：构造一个通用表头，让"数值密集列"识别仍能跑 */
+    const effectiveHeader=header||(rows[0]||[]).map(trimCell).map((_,i)=>'col'+i);
+    const iName=header?(header.findIndex(h=>h==='姓名'||h==='学生姓名'||h==='名字'||h.toLowerCase()==='name')):0;
+
+    /* 自动识别所有可用作学科的列：
+       1) 表头精确匹配已知科目 → 直接识别
+       2) 表头不在已知科目中，但 60% 行内能解析成 0~150 的数字 → 视作数值学科，自动命名"科目N"
+       排除姓名列和明显的序号/学号列（学号长度>5 且非纯数字分数） */
+    const dataRows=rows.slice(start).filter(r=>String(r[iName]||'').trim().length>0);
+    const totalRows=dataRows.length||1;
+    const allKnown=[...SHANDONG_COURSES];
+    const autoDetect=[]; // {name, idx, isKnown}
+    for(let i=0;i<effectiveHeader.length;i++){
+      if(i===iName)continue;
+      const raw=effectiveHeader[i]||'';
+      /* 先查近义词表，没有则用原名 */
+      const norm=COURSE_ALIAS[raw]||raw;
+      if(SHANDONG_COURSES.includes(norm)){autoDetect.push({name:norm,idx:i,isKnown:true});continue;}
+      /* 无表头时，多跳过一列"序号列"（值是 1..N 的递增整数） */
+      if(!header && i===iName+1){
+        let seq=true;
+        for(let r=0;r<dataRows.length;r++){
+          const v=parseFloat(dataRows[r][i]);
+          if(!(v===r+1 || v===r)){seq=false;break;}
+        }
+        if(seq){continue;}
+      }
+      /* 数值密集列：至少 60% 数据行可解析为 0~150 数字 */
+      let ok=0;
+      for(let r=0;r<dataRows.length;r++){
+        const v=dataRows[r][i];if(v==null||v==='')continue;
+        const n=parseFloat(v);if(!isNaN(n)&&n>=0&&n<=150)ok++;
+      }
+      const ratio=ok/totalRows;
+      if(ratio>=0.6){
+        autoDetect.push({name:'科目'+(autoDetect.filter(x=>!x.isKnown).length+1),idx:i,isKnown:false});
+      }
+    }
+    if(!autoDetect.length){toast('未识别到科目列，请检查 Excel 表头或数值');return;}
+
+    /* 如果 ex 为空（来自顶部「Excel 一键导入」，尚未创建考试）：
+       从隐藏 file input 的 dataset 读取考试名/日期，自动创建考试并识别科目 */
+    if(!ex){
+      const fileSel=$('#exExcelFile');
+      const name=(fileSel&&fileSel.dataset.exName)||'未命名考试';
+      const dStr=(fileSel&&fileSel.dataset.exDate)||new Date().toISOString().slice(0,10);
+      const cls=curCls==='all'?defaultClsId():curCls;
+      const stu=DB.students.filter(s=>!s.archived && stuCls(s)===cls);
+      ex={id:uid(),paper:false,name,date:dStr,cls,subjects:[],students:stu.map(s=>({id:s.id,name:s.name,subjects:{},total:0}))};
+      DB.exams.push(ex);save();renderExList();
+    }
+
+    /* 把识别到的所有科目都纳入本次考试（含原来已选的） */
+    const newSubs=[...new Set(ex.subjects.concat(autoDetect.map(x=>x.name)))];
+    ex.subjects=newSubs;
+    setExSubjects(newSubs);
+
+    /* 按识别出的映射填数据 */
+    let matched=0,missing=[];
+    ex.students.forEach(st=>{
+      const row=dataRows.find(r=>String(r[iName]||'').trim()===st.name);
+      if(!row){missing.push(st.name);return;}
+      let stTotal=0;
+      autoDetect.forEach(col=>{
+        const v=parseFloat(row[col.idx]);
+        if(!isNaN(v)&&v>=0&&v<=150){st.subjects[col.name]=v;stTotal+=v;}
+      });
+      st.total=stTotal;
+      if(stTotal>0)matched++;
+    });
+    save();renderExEditor(ex);
+    const extraNames=autoDetect.filter(x=>!x.isKnown).map(x=>x.name);
+    let tip=`已自动识别 ${autoDetect.length} 个科目，导入 ${matched} 条数据`;
+    if(extraNames.length)tip+=`（含自动命名：${extraNames.join('、')}）`;
+    if(missing.length)tip+=`；${missing.length} 人 Excel 中未找到`;
+    toast(tip);
+  }catch(err){toast('Excel 解析失败：'+(err.message||err));}
 }
 function renderExEditor(ex){
   const box=$('#exEditor');if(!box)return;
   box.innerHTML=`<div class="muted" style="margin-bottom:8px">录入「${esc(ex.name)}」成绩（满分100）：</div>
+    <div class="row" style="margin-bottom:8px">
+      <button class="btn ghost" data-action="ex-ed-upload" data-eid="${ex.id}" title="上传 Excel 自动填表">📥 从 Excel 导入</button>
+      <button class="btn ghost" data-action="ex-ed-tpl" data-eid="${ex.id}" title="下载当前科目的模板">📋 下载模板</button>
+      <input type="file" id="exEdFile_${ex.id}" accept=".xlsx,.xls,.csv" style="display:none">
+      <span class="muted" style="font-size:12px">提示：自动识别表头科目 + 数值密集列，姓名匹配 DB.students</span>
+    </div>
     <div class="scroll-x"><table class="tb"><thead><tr><th>学生</th>${ex.subjects.map(s=>`<th>${esc(s)}</th>`).join('')}<th>总分</th></tr></thead>
     <tbody>${ex.students.map(st=>`<tr data-sid="${st.id}"><td>${esc(st.name)}</td>${ex.subjects.map(s=>`<td><input type="number" min="0" max="100" data-sid="${st.id}" data-sub="${esc(s)}" value="${st.subjects[s]||''}" style="width:64px"></td>`).join('')}<td class="tot">${st.total}</td></tr>`).join('')}</tbody></table></div>
     <div class="row end" style="margin-top:10px"><button class="btn primary" id="exSaveScores">保存并计算</button></div>`;
@@ -2409,6 +4053,22 @@ function renderExEditor(ex){
     ex.students.forEach(st=>{st.total=ex.subjects.reduce((a,s)=>a+(st.subjects[s]||0),0);});
     save();renderExList();renderBoardOut(ex);toast('成绩已保存');
   };
+  /* 编辑器内的 Excel 上传 */
+  const edBtn=document.querySelector(`[data-action="ex-ed-upload"][data-eid="${ex.id}"]`);
+  if(edBtn){
+    edBtn.onclick=()=>{$(`#exEdFile_${ex.id}`).click();};
+    $(`#exEdFile_${ex.id}`).onchange=(e)=>{importExamFromExcel(ex,e.target.files[0]);e.target.value='';};
+  }
+  const tplBtn=document.querySelector(`[data-action="ex-ed-tpl"][data-eid="${ex.id}"]`);
+  if(tplBtn){
+    tplBtn.onclick=()=>{
+      const ws=XLSX.utils.aoa_to_sheet([['姓名',...ex.subjects],...ex.students.map(s=>[s.name,...ex.subjects.map(_=>'')])]);
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,ws,'成绩');
+      XLSX.writeFile(wb,`${ex.name}-导入模板.xlsx`);
+      toast('模板已下载');
+    };
+  }
 }
 
 /* ============================================================
@@ -2481,6 +4141,9 @@ initSidebarDrag();
 initNavDrag();
 applyResponsive();
 window.addEventListener('resize',applyResponsive);
+/* 点击学生档案菜单外区域 / Esc 关闭 */
+document.addEventListener('click',e=>{const m=$('#stuMenu');if(m && !e.target.closest('#stuMenu') && !e.target.closest('.stu-cell'))closeStuMenu();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeStuMenu();});
 setupRotateTip();
 /* 启动若已开启云同步，先拉取云端最新数据，让本设备跟上其它设备的更新 */
 if(SYNC.enabled&&SYNC.token&&SYNC.gistId){
@@ -2493,5 +4156,6 @@ if(SYNC.enabled&&SYNC.token&&SYNC.gistId){
 }
 showView('home');
 </script>
-</body>
-</html>
+
+
+</body></html>
