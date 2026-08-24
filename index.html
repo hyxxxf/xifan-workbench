@@ -261,16 +261,16 @@ textarea{resize:vertical}
 .stu-cls-tabs .tab{font-size:14px;padding:7px 18px}
 .stu-cls-tabs .tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
 
-.stu-cell{min-height:58px;border:1.5px solid var(--input-b);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  text-align:center;background:var(--card);cursor:pointer;user-select:none;padding:4px 6px;transition:.12s;position:relative;overflow:hidden}
+.stu-cell{min-height:72px;border:1.5px solid var(--input-b);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;background:var(--card);cursor:pointer;user-select:none;padding:6px 8px;transition:.12s;position:relative;overflow:hidden}
 .stu-cell:hover{border-color:var(--primary);filter:brightness(.97)}
-.stu-cell .nm{font-size:14px;font-weight:700;color:var(--text);line-height:1.2;word-break:break-all}
-.stu-cell .sub{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stu-cell.empty{border-style:dashed;color:var(--muted);font-size:12px}
+.stu-cell .nm{font-size:16px;font-weight:700;color:var(--text);line-height:1.25;word-break:break-all}
+.stu-cell .sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stu-cell.empty{border-style:dashed;color:var(--muted);font-size:14px}
 /* 学生档案按性别区分背景 */
-.stu-cell.st-male{background:#eef5ff;border-color:#c7d8f0}
-.stu-cell.st-female{background:#fff0f5;border-color:#edd0da}
-.stu-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;max-width:1100px;margin:0 auto}
+.stu-cell.st-male{background:#e8f3ff;border-color:#b9d4f0}
+.stu-cell.st-female{background:#fff0f6;border-color:#ebc8d6}
+.stu-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;max-width:1300px;margin:0 auto}
 @media (max-width:1200px){.stu-grid{grid-template-columns:repeat(6,1fr)}}
 @media (max-width:900px){.stu-grid{grid-template-columns:repeat(5,1fr)}}
 @media (max-width:600px){.stu-grid{grid-template-columns:repeat(4,1fr)}}
