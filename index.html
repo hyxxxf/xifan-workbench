@@ -1888,6 +1888,7 @@ function renderSeats(root){
       <span>列数</span><input id="seatC" type="number" value="${DB.seats.cols}" style="width:64px">
       <button class="btn" data-action="seat-apply">应用行列</button>
       <button class="btn" data-action="seat-auto">自动排座</button>
+      <button class="btn primary" data-action="seat-fill-all" title="把「未分配学生」按行序依次填入剩余空位，已入座的学生不动">➕ 一键添加所有人</button>
       <button class="btn danger" data-action="seat-clear">清空</button>
       <span class="muted" style="margin-left:auto">覆盖元素：</span>
       <button class="btn sm" data-action="seat-add-corridor" title="像 Excel 插入一列：在座位间加一条纵向通道，不影响 8×8 座位数量">➕ 添加走廊</button>
@@ -3435,6 +3436,30 @@ document.addEventListener('click',e=>{
     if(!DB.seats.podiums)DB.seats.podiums=[];
     DB.seats.podiums=DB.seats.podiums.filter(p=>p>=-1 && p<=DB.seats.rows-1);
     save();renderSeatGrid();renderSeatPool();return;
+  }
+  if(act==='seat-fill-all'){
+    const active=DB.students.filter(s=>!s.archived && stuCls(s)===curCls);
+    if(!active.length){toast('当前班级还没有学生，请先在学生档案添加');return;}
+    const L=curSeatLayout();
+    const assigned=new Set(Object.values(L));
+    const pool=active.filter(s=>!assigned.has(s.id));
+    if(!pool.length){toast('所有学生都已入座 🎉');return;}
+    // 被讲台覆盖的格子不可入座
+    const blocked=new Set();
+    const g2=$('#seatGrid');
+    if(g2)g2.querySelectorAll('.seat.blocked[data-key]').forEach(s=>blocked.add(s.dataset.key));
+    let i=0;
+    for(let r=0;r<DB.seats.rows && i<pool.length;r++)for(let c=0;c<DB.seats.cols && i<pool.length;c++){
+      const key=r+'-'+c;
+      if(blocked.has(key))continue;   // 讲台挡住
+      if(L[key])continue;             // 已有人，不覆盖
+      L[key]=pool[i++].id;
+    }
+    const placed=i, left=pool.length-placed;
+    save();renderSeatGrid();renderSeatPool();
+    if(placed>0)toast('已一键入座 '+placed+' 人'+(left>0?('（座位不够，还剩 '+left+' 人未入座）'):''));
+    else toast('没有可用空位，请先增加行列或清出座位');
+    return;
   }
   if(act==='seat-add-corridor'){addCorridor();save();renderSeatGrid();renderSeatPool();return;}
   if(act==='seat-del-corridor'){const pos=parseInt(el.dataset.pos,10);if(!isNaN(pos))DB.seats.corridors=DB.seats.corridors.filter(p=>p!==pos);save();renderSeatGrid();renderSeatPool();return;}
