@@ -2926,14 +2926,14 @@ function renderTrend(){
   attachStuGoto($('#classTable'));
 }
 
-/* 表格里 [data-act=stu-goto] 委托：点击姓名 → 跳到个人成长曲线
-   在 root（如 #classTable / #boardOut）上挂一次事件委托，root 内部任何 [data-act=stu-goto] 都触发
+/* 表格里 [data-action=stu-goto] 委托：点击姓名 → 跳到个人成长曲线
+   在 root（如 #classTable / #boardOut）上挂一次事件委托，root 内部任何 [data-action=stu-goto] 都触发
    - 若当前页已有 #stuPick（成长曲线页）：直接选中学生+渲染
    - 若没有（成绩看板页）：先切到成长曲线 tab 并 renderTrend，再选中学生 */
 function attachStuGoto(root){
   if(!root || root.dataset.gotoBound)return;
   root.addEventListener('click',e=>{
-    const a=e.target.closest('[data-act=stu-goto]');if(!a)return;
+    const a=e.target.closest('[data-action=stu-goto]');if(!a)return;
     e.preventDefault();
     const sid=a.dataset.sid;
     const nameText=a.textContent.trim();
