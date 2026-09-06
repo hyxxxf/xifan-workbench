@@ -2465,13 +2465,20 @@ function renderBoard(){
       <input type="file" id="exExcelFile" accept=".xlsx,.xls,.csv" style="display:none">
     </div>
     <div id="exSubjWarn" class="muted" style="color:var(--danger);font-size:12px;margin-top:6px;display:none"></div>
-    <div class="row" style="margin-top:10px"><button class="btn primary" data-action="ex-add">+ 创建考试并录入</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn ghost" data-action="ex-save-draft" title="把当前填写的考试名 / 日期 / 参加科目暂存到本地，下次进入自动恢复">💾 保存</button><button class="btn primary" data-action="ex-add">+ 创建考试并录入</button></div>
     <div id="exEditor"></div>
   </div>
   <div id="boardOut"></div>
   <div class="section-h" style="margin-top:18px">已录入考试</div>
   <div class="list" id="exList"></div>`;
   $('#exSubjectsBox').innerHTML='<span class="subj-empty">还没有选科目，请从下方下拉选</span>';
+  // 恢复考试录入草稿：只在字段为空时回填，避免覆盖用户本次新填的内容
+  const draft=loadExDraft();
+  if(draft){
+    if(!$('#exName').value && draft.name)$('#exName').value=draft.name;
+    if(!$('#exDate').value && draft.date)$('#exDate').value=draft.date;
+    if(draft.subjects && draft.subjects.length)setExSubjects(draft.subjects);
+  }
   renderExList();
   bindClsTabs('exClsTabs');
   /* 顶部隐藏的 Excel 上传 input（点「📥 Excel 一键导入」触发，由 importExamFromExcel 自动建考试+识别科目） */
@@ -3534,6 +3541,7 @@ document.addEventListener('click',e=>{
 
   /* ---- 成绩看板 ---- */
   if(act==='ex-add'){createExam();return;}
+  if(act==='ex-save-draft'){saveExDraft();return;}
   if(act==='ex-view'){
     const ex=DB.exams.find(x=>x.id===el.dataset.id);
     const box=$('#boardOut');
@@ -3928,6 +3936,7 @@ function createExam(){
   if(!students.length){toast('当前班级还没有学生，请先在学生档案添加');return;}
   const ex={id:uid(),paper:false,name,date:date||new Date().toISOString().slice(0,10),cls,subjects,students:students.map(s=>({id:s.id,name:s.name,subjects:{},total:0}))};
   DB.exams.push(ex);save();
+  clearExDraft(); // 草稿已完成使命，不再保留
   renderExEditor(ex);
 }
 
@@ -3952,6 +3961,28 @@ function addExSubject(s){
 function removeExSubject(s){
   setExSubjects(getExSubjects().filter(x=>x!==s));
   syncEditorSubjects();
+}
+/* 考试录入草稿：仅本地缓存（localStorage），用于「💾 保存」后下次进入自动回填，避免误关页面丢配置。
+   范围 = 当前班级 + 考试名 + 日期 + 参加科目；点「+ 创建考试并录入」生成 exam 后建议「保存」覆盖草稿。 */
+const EX_DRAFT_KEY='xifan_exam_draft_v1';
+function loadExDraft(){
+  try{const r=localStorage.getItem(EX_DRAFT_KEY);if(r)return JSON.parse(r);}catch(e){}
+  return null;
+}
+function saveExDraft(){
+  const draft={
+    cls:curCls,
+    name:$('#exName')?.value?.trim()||'',
+    date:$('#exDate')?.value||'',
+    subjects:getExSubjects(),
+    ts:Date.now(),
+  };
+  try{localStorage.setItem(EX_DRAFT_KEY,JSON.stringify(draft));}
+  catch(e){toast('草稿保存失败：'+e.message);return;}
+  toast('已保存草稿（'+draft.subjects.length+' 个科目），下次进入自动恢复');
+}
+function clearExDraft(){
+  try{localStorage.removeItem(EX_DRAFT_KEY);}catch(e){}
 }
 /* 把顶部 chip 列表双向同步到「当前正在编辑的考试对象」ex.subjects：
    - 已创建过考试且 #exEditor 显示该考试时，删除 chip 会从 ex.subjects 移除该科目（已录分数保留在 st.subjects[s]，方便误删恢复后再加回来时不丢数据）
