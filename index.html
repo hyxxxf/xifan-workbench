@@ -2509,17 +2509,27 @@ function renderExList(){
       </div></div>`;
   }).join('');
 }
-function computeStats(scores){
+function computeStats(scores, rule){
   const n=scores.length;if(!n)return null;
   const sum=scores.reduce((a,b)=>a+b,0);
   const avg=sum/n;
   const max=Math.max(...scores),min=Math.min(...scores);
   const variance=scores.reduce((a,b)=>a+(b-avg)*(b-avg),0)/n;
   const std=Math.sqrt(variance);
-  const pass=scores.filter(s=>s>=60).length/n*100;
-  const excellent=scores.filter(s=>s>=85).length/n*100;
-  const low=scores.filter(s=>s<60).length/n*100;
-  return {n,avg,max,min,std,pass,excellent,low};
+  const passLine=rule?rule.weak:60;       // 及格线（≥ 为及格）
+  const excLine=rule?rule.strong:85;       // 优秀线（≥ 为优秀）
+  const pass=scores.filter(s=>s>=passLine).length/n*100;
+  const excellent=scores.filter(s=>s>=excLine).length/n*100;
+  const low=scores.filter(s=>s<passLine).length/n*100;
+  return {n,avg,max,min,std,pass,excellent,low,passLine,excLine};
+}
+/* 某层次（学生数组）各科及格率 / 优秀率 汇总，用于「分层学情分析」 */
+function layerRatesHtml(list,ex){
+  if(!list||!list.length)return '';
+  return '<div style="margin-bottom:10px;line-height:2">'+ex.subjects.map(s=>{
+    const stp=computeStats(list.map(st=>(st.subjects[s]||0)), ruleFor(s));
+    return `<span class="muted" style="font-size:12px;margin-right:14px">${esc(s)}：及格 <b style="color:var(--success)">${stp.pass.toFixed(0)}%</b> / 优秀 <b style="color:#3a8ee6">${stp.excellent.toFixed(0)}%</b></span>`;
+  }).join('')+'</div>';
 }
 /* 渲染某一层次的学生成绩表（带班内排名） */
 function renderLayerTable(list,ex,rankOffset){
@@ -2572,7 +2582,12 @@ function renderBoardOut(ex){
     <button class="btn sm ghost" data-action="ex-collapse" title="收起看板">▴ 收起</button>
   </div>`;
   const allScores=ex.students.map(s=>s.total);
-  const st=computeStats(allScores);
+  /* 总分层的「优秀线 / 及格线」按满分占比折算，使多科合计也能正确判定 */
+  const subjFull={};
+  ex.subjects.forEach(s=>{const arr=ex.students.map(x=>(x.subjects[s]||0));subjFull[s]=arr.length?Math.max(...arr):0;});
+  const fullMark=ex.subjects.reduce((a,s)=>a+(subjFull[s]||0),0)||1;
+  const totalRule={strong:fullMark*RULES.default.strong/100, weak:fullMark*RULES.default.weak/100};
+  const st=computeStats(allScores,totalRule);
   // 分数分布直方图
   const bins=[0,10,20,30,40,50,60,70,80,90,100];
   const counts=new Array(bins.length-1).fill(0);
@@ -2607,16 +2622,39 @@ function renderBoardOut(ex){
   <div id="layerDetailWrap">
     <div class="layer-detail" id="layerDetail-top" data-layer="top" hidden>
       <div class="card-h">优生层（前27%）学生成绩</div>
+      ${layerRatesHtml(top,ex)}
       ${renderLayerTable(top,ex,0)}
     </div>
     <div class="layer-detail" id="layerDetail-mid" data-layer="mid" hidden>
       <div class="card-h">中等层学生成绩</div>
+      ${layerRatesHtml(mid,ex)}
       ${renderLayerTable(mid,ex,top.length)}
     </div>
     <div class="layer-detail" id="layerDetail-bottom" data-layer="bottom" hidden>
       <div class="card-h">待进层（后27%）学生成绩</div>
+      ${layerRatesHtml(bottom,ex)}
       ${renderLayerTable(bottom,ex,top.length+mid.length)}
     </div>
+  </div>
+  <div class="card" style="margin-bottom:18px"><div class="card-h">各科优秀率与及格率 <span class="muted" style="font-size:12px;font-weight:400;margin-left:6px">（优秀线 / 及格线由下方「优秀线与及格线」设定，可逐科调整）</span></div>
+    ${ex.subjects.map(s=>{
+      const sc=ex.students.map(x=>(x.subjects[s]||0));
+      const stp=computeStats(sc, ruleFor(s));
+      const passW=Math.max(0,Math.min(100,stp.pass)), excW=Math.max(0,Math.min(100,stp.excellent));
+      return `<div style="margin:10px 0">
+        <div class="bar-lbl"><span style="font-weight:600">${esc(s)}</span><span class="muted" style="font-size:12px">及格线 ${Math.round(stp.passLine)} · 优秀线 ${Math.round(stp.excLine)} · 均分 ${stp.avg.toFixed(1)}</span></div>
+        <div class="row" style="gap:8px;align-items:center;margin-top:3px">
+          <span class="muted" style="font-size:12px;width:44px;flex:0 0 auto">及格率</span>
+          <div class="bar" style="flex:1"><i style="width:${passW}%"></i></div>
+          <span style="width:48px;text-align:right;font-weight:700;color:var(--success)">${stp.pass.toFixed(0)}%</span>
+        </div>
+        <div class="row" style="gap:8px;align-items:center;margin-top:4px">
+          <span class="muted" style="font-size:12px;width:44px;flex:0 0 auto">优秀率</span>
+          <div class="bar" style="flex:1;background:rgba(58,142,230,.12)"><i style="width:${excW}%;background:#3a8ee6"></i></div>
+          <span style="width:48px;text-align:right;font-weight:700;color:#3a8ee6">${stp.excellent.toFixed(0)}%</span>
+        </div>
+      </div>`;
+    }).join('')}
   </div>
   <div class="card" style="margin-bottom:18px"><div class="card-h">各科目薄弱人数（失分统计）</div>
     ${ex.subjects.map(s=>`<div style="margin:6px 0"><div class="bar-lbl"><span>${esc(s)}（均分 ${subjAvg[s].toFixed(1)}）</span><span>${weakSubj[s]} 人低于均分</span></div><div class="bar ${weakSubj[s]>ex.students.length/2?'warn':''}"><i style="width:${weakSubj[s]/ex.students.length*100}%"></i></div></div>`).join('')}
@@ -2628,20 +2666,20 @@ function renderBoardOut(ex){
   </div>
   <div class="card" style="margin-bottom:14px;padding:12px 14px">
     <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-      <span style="font-weight:700;font-size:14px">📏 强弱判定标准</span>
+      <span style="font-weight:700;font-size:14px">📏 优秀线与及格线</span>
       <span style="flex:1"></span>
-      <span class="muted" style="font-size:12px">（修改实时生效，跨刷新保留）</span>
+      <span class="muted" style="font-size:12px">（决定各科优秀率 / 及格率，修改实时生效，跨刷新保留）</span>
     </div>
     {/* 全局默认 */}
     <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;background:var(--bg);border-radius:10px;margin-bottom:10px">
       <span style="font-weight:600">默认</span>
-      <span class="muted" style="font-size:12px">强</span><span style="font-weight:700;color:var(--success)">≥</span>
+      <span class="muted" style="font-size:12px">优秀线</span><span style="font-weight:700;color:var(--success)">≥</span>
       <input id="ruleStrong" type="number" min="0" max="150" value="${RULES.default.strong}" style="width:64px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-weight:700;color:var(--success);font-size:14px;text-align:center">
-      <span class="muted" style="font-size:12px">分；弱</span><span style="font-weight:700;color:var(--danger)">&lt;</span>
+      <span class="muted" style="font-size:12px">分；及格线</span><span style="font-weight:700;color:var(--danger)">≥</span>
       <input id="ruleWeak" type="number" min="0" max="150" value="${RULES.default.weak}" style="width:64px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-weight:700;color:var(--danger);font-size:14px;text-align:center">
       <span class="muted" style="font-size:12px">分</span>
       <span style="flex:1"></span>
-      <button class="btn sm ghost" data-action="rule-reset" title="恢复默认 85 / 60">↺ 重置全部</button>
+      <button class="btn sm ghost" data-action="rule-reset" title="恢复默认 优秀85 / 及格60">↺ 重置全部</button>
     </div>
     {/* 各学科独立标准 */}
     <div class="muted" style="font-size:12px;margin-bottom:6px">按学科单独制定（留空 = 用「默认」）</div>
@@ -2651,9 +2689,9 @@ function renderBoardOut(ex){
         const useDefault=!ps.strong||!ps.weak;
         return `<div class="rule-row" data-subj="${esc(subj)}" style="display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid ${useDefault?'var(--border)':'var(--primary)'};border-radius:10px;background:${useDefault?'var(--card)':'rgba(46,158,91,.06)'}">
           <span style="font-weight:600;flex:0 0 auto">${esc(subj)}</span>
-          <span class="muted" style="font-size:11px">强</span><span style="font-weight:700;color:var(--success)">≥</span>
+          <span class="muted" style="font-size:11px">优秀</span><span style="font-weight:700;color:var(--success)">≥</span>
           <input type="number" class="rule-per-s" data-subj="${esc(subj)}" min="0" max="150" value="${useDefault?RULES.default.strong:ps.strong}" placeholder="${RULES.default.strong}" style="width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--success);font-size:13px;text-align:center">
-          <span class="muted" style="font-size:11px">弱</span><span style="font-weight:700;color:var(--danger)">&lt;</span>
+          <span class="muted" style="font-size:11px">及格</span><span style="font-weight:700;color:var(--danger)">≥</span>
           <input type="number" class="rule-per-w" data-subj="${esc(subj)}" min="0" max="150" value="${useDefault?RULES.default.weak:ps.weak}" placeholder="${RULES.default.weak}" style="width:56px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-weight:700;color:var(--danger);font-size:13px;text-align:center">
           <button class="btn sm ghost rule-per-reset" data-action="rule-subj-reset" data-subj="${esc(subj)}" title="重置该学科为默认" style="padding:2px 8px;font-size:11px">↺</button>
         </div>`;
@@ -2878,7 +2916,7 @@ function renderTrend(){
       </select>
       <span class="pill" id="trendExamMeta"></span>
     </div>
-    <div class="muted" style="margin-bottom:8px;font-size:12px">自动算全班均分 · 分数段分布 · 绿≥85 / 黄≥60 / 红＜60</div>
+    <div class="muted" style="margin-bottom:8px;font-size:12px">自动算全班均分 · 分数段分布 · 绿≥${RULES.default.strong} 优秀 / 黄≥${RULES.default.weak} 及格 / 红＜${RULES.default.weak}</div>
     <div id="classTable"></div>
     <div class="trend-export-row">
       <button class="btn" data-action="export-class-table">↓ 导出全班成绩（CSV）</button>
@@ -3011,8 +3049,9 @@ function renderClassTable(ex){
   });
   const total=ex.students.length;
 
-  // 单元格颜色
-  const cellCls=v=>v>=85?'cell-good':v>=75?'':v>=60?'cell-mid':'cell-bad';
+  // 单元格颜色（优秀线 / 及格线随下方「优秀线与及格线」设定变化）
+  const excL=RULES.default.strong, passL=RULES.default.weak;
+  const cellCls=v=>v>=excL?'cell-good':v>=passL?'cell-mid':'cell-bad';
 
   let html=`
   <div class="row" style="margin-bottom:12px;gap:24px;flex-wrap:wrap;align-items:flex-end">
@@ -3128,11 +3167,11 @@ function renderStuArea(sid){
       ${subjects.map(sub=>{
         const v=stEx.subjects[sub];
         if(v==null)return '<td><span class="muted">-</span></td>';
-        const cls=v>=85?'cell-good':v>=75?'':v>=60?'cell-mid':'cell-bad';
+        const cls=v>=RULES.default.strong?'cell-good':v>=RULES.default.weak?'cell-mid':'cell-bad';
         return `<td class="${cls}">${v}</td>`;
       }).join('')}
       <td><b>${total}</b></td>
-      <td class="${avg>=85?'cell-good':avg>=60?'cell-mid':'cell-bad'}">${avg.toFixed(1)}</td>
+      <td class="${avg>=RULES.default.strong?'cell-good':avg>=RULES.default.weak?'cell-mid':'cell-bad'}">${avg.toFixed(1)}</td>
     </tr>`;
   });
   html+=`</tbody></table></div>`;
@@ -3627,7 +3666,7 @@ document.addEventListener('click',e=>{
     });
     const ex=DB.exams.find(x=>x.id===($('#boardOut').dataset.examId||''));
     if(ex)renderBoardOut(ex);
-    toast('已恢复全部为默认 85 / 60');
+    toast('已恢复全部为默认（优秀 '+RULES.default.strong+' / 及格 '+RULES.default.weak+'）');
     return;
   }
   /* ---- 强弱判定标准：单科重置为默认 ---- */
