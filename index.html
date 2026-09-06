@@ -3947,9 +3947,36 @@ function addExSubject(s){
   const list=getExSubjects();
   if(list.includes(s)){toast('科目「'+s+'」已存在');return;}
   list.push(s);setExSubjects(list);
+  syncEditorSubjects();
 }
 function removeExSubject(s){
   setExSubjects(getExSubjects().filter(x=>x!==s));
+  syncEditorSubjects();
+}
+/* 把顶部 chip 列表双向同步到「当前正在编辑的考试对象」ex.subjects：
+   - 已创建过考试且 #exEditor 显示该考试时，删除 chip 会从 ex.subjects 移除该科目（已录分数保留在 st.subjects[s]，方便误删恢复后再加回来时不丢数据）
+   - 添加 chip 时同步往 ex.subjects 追加该科目，下方录入表立刻多出一列空分输入框 */
+function syncEditorSubjects(){
+  const edBox=$('#exEditor');
+  if(!edBox||!edBox.dataset.examId)return;
+  const ex=DB.exams.find(x=>x.id===edBox.dataset.examId);
+  if(!ex)return;
+  const wanted=getExSubjects();
+  const cur=ex.subjects.slice();
+  // 列表无变化（顺序、内容都一致）则不动，避免无谓重渲染
+  if(cur.length===wanted.length && cur.every((s,i)=>s===wanted[i]))return;
+  ex.subjects=wanted.slice();
+  save();
+  renderExEditor(ex);
+  // 仅在数量变化时提示，避免每次输入都弹 toast
+  const added=wanted.filter(s=>!cur.includes(s));
+  const removed=cur.filter(s=>!wanted.includes(s));
+  if(added.length||removed.length){
+    let tip='已同步录入表科目';
+    if(added.length)tip+='：新增 '+added.join('、');
+    if(removed.length)tip+='；移除 '+removed.join('、')+'（已录分数保留在后台，重复添加可恢复）';
+    toast(tip);
+  }
 }
 
 /* 下载 Excel 模板（按当前已选 chip + DB.students 姓名预填空行） */
@@ -4071,6 +4098,7 @@ async function importExamFromExcel(ex,file){
 }
 function renderExEditor(ex){
   const box=$('#exEditor');if(!box)return;
+  box.dataset.examId=ex.id; // 让 syncEditorSubjects 能找到当前正在编辑的考试
   box.innerHTML=`<div class="muted" style="margin-bottom:8px">录入「${esc(ex.name)}」成绩（满分100）：</div>
     <div class="row" style="margin-bottom:8px">
       <button class="btn ghost" data-action="ex-ed-upload" data-eid="${ex.id}" title="上传 Excel 自动填表">📥 从 Excel 导入</button>
