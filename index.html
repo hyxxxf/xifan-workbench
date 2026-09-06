@@ -2906,8 +2906,8 @@ function renderTrend(){
   renderClassTable(latest);
 
   // 绑定事件
-  box.querySelectorAll('[data-act=trend-subj]').forEach(b=>b.onclick=()=>{
-    box.querySelectorAll('[data-act=trend-subj]').forEach(x=>x.classList.remove('active'));
+  box.querySelectorAll('[data-action=trend-subj]').forEach(b=>b.onclick=()=>{
+    box.querySelectorAll('[data-action=trend-subj]').forEach(x=>x.classList.remove('active'));
     b.classList.add('active');
     renderClassCurve(b.dataset.sub);
   });
@@ -2918,9 +2918,9 @@ function renderTrend(){
   };
 
   // 导出按钮
-  box.querySelector('[data-act=export-class-curve]').onclick=exportClassCurvePNG;
-  box.querySelector('[data-act=export-class-table]').onclick=exportClassTableCSV;
-  box.querySelector('[data-act=export-stu-curve]').onclick=exportStuCurvePNG;
+  box.querySelector('[data-action=export-class-curve]').onclick=exportClassCurvePNG;
+  box.querySelector('[data-action=export-class-table]').onclick=exportClassTableCSV;
+  box.querySelector('[data-action=export-stu-curve]').onclick=exportStuCurvePNG;
 
   // 表格姓名点击 → 直接跳到该学生个人成长曲线（事件委托，表格重渲染也生效）
   attachStuGoto($('#classTable'));
@@ -2941,7 +2941,7 @@ function attachStuGoto(root){
       const pick=$('#stuPick');
       if(!pick)return;
       if(![...pick.options].some(o=>o.value===sid)){
-        const opt=document.createElement('option');opt.value=sid;opt.textContent=nameText;pick+opt;
+        const opt=document.createElement('option');opt.value=sid;opt.textContent=nameText;pick.appendChild(opt);
       }
       pick.value=sid;
       renderStuArea(sid);
