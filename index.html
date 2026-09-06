@@ -1835,6 +1835,10 @@ function curSeatLayout(){
     DB.seats.podiums = DB.seats.rows>=1 ? [-1] : [];
   }
   DB.seats.podiums = DB.seats.podiums.filter(p=>Number.isInteger(p) && p>=-1 && p<=DB.seats.rows-1);
+  // 兜底：保证 overlays 与 overlays.list 始终存在，避免「Cannot read properties of undefined (reading 'list')」
+  // 远端拉来的旧布局 / 干净的新班级都可能缺这个字段，所有读 .list 的地方（overlaysList / addOverlay / removeOverlay / moveOverlay / resetOverlay / bindSeatOverlayDrag）依赖它
+  if(!lay.overlays || typeof lay.overlays!=='object')lay.overlays={};
+  if(!Array.isArray(lay.overlays.list))lay.overlays.list=[];
   return lay;
 }
 /* 像 Excel 插入一列：在座位网格中追加一条纵向走廊（全局，不占座位） */
