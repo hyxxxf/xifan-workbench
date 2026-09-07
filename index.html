@@ -2460,8 +2460,10 @@ function renderBoard(){
       </select>
       <button class="btn" data-action="ex-subj-add">+ 添加</button>
       <span style="flex:1"></span>
+      <span class="muted" style="font-size:12px">目标班级</span>
+      <select id="exImportCls" title="把这次导入的成绩归属到哪个班级" style="min-width:120px">${(DB.classes||[]).map(c=>`<option value="${c.id}" ${c.id===curCls?'selected':''}>${esc(c.name)}</option>`).join('')}</select>
       <button class="btn ghost" data-action="ex-tpl" title="下载当前科目的 Excel 模板">📋 下载模板</button>
-      <button class="btn ghost" data-action="ex-upload" title="从 Excel 一键导入成绩">📥 Excel 一键导入</button>
+      <button class="btn ghost" data-action="ex-upload" title="从 Excel 一键导入成绩（导入到上方选定的班级）">📥 Excel 一键导入</button>
       <input type="file" id="exExcelFile" accept=".xlsx,.xls,.csv" style="display:none">
     </div>
     <div id="exSubjWarn" class="muted" style="color:var(--danger);font-size:12px;margin-top:6px;display:none"></div>
@@ -3768,13 +3770,17 @@ document.addEventListener('click',e=>{
       setTimeout(()=>openStModal(),300); // 自动弹出"新增学生"
       return;
     }
-    /* 同名同日检查（按班级分别判断） */
+    /* 目标班级：优先读下拉，若没有则用当前班级，但 curCls='all' 时强制用默认班级 */
+    const sel=$('#exImportCls');
+    const targetCls=(sel&&sel.value) ? sel.value : (curCls==='all'?defaultClsId():curCls);
+    if(!targetCls){toast('请先选择目标班级');return;}
+    /* 同名同日检查（仅对目标班级判断） */
     const dStr=date||new Date().toISOString().slice(0,10);
-    if(DB.exams.some(e=>e.name===name&&e.date===dStr&&e.cls===curCls)){toast(`${clsLabel(curCls)} 已有「${name}」同日期的考试`);return;}
-    /* 直接弹文件选择，由 importExamFromExcel 自动创建考试并识别科目 */
+    if(DB.exams.some(e=>e.name===name&&e.date===dStr&&(e.cls||defaultClsId())===targetCls)){toast(`${clsLabel(targetCls)} 已有「${name}」同日期的考试`);return;}
+    /* 直接弹文件选择，由 importExamFromExcel 按目标班级创建考试并识别科目 */
     const tmpId='tmp-excel-uid';   // 占位，importExamFromExcel 里创建真实考试后赋 eid
     const fileSel=$('#exExcelFile');
-    fileSel.dataset.exName=name;fileSel.dataset.exDate=dStr;fileSel.dataset.exTmp=tmpId;
+    fileSel.dataset.exName=name;fileSel.dataset.exDate=dStr;fileSel.dataset.exTmp=tmpId;fileSel.dataset.imptCls=targetCls;
     fileSel.click();
     return;
   }
@@ -4185,10 +4191,15 @@ async function importExamFromExcel(ex,file){
       const fileSel=$('#exExcelFile');
       const name=(fileSel&&fileSel.dataset.exName)||'未命名考试';
       const dStr=(fileSel&&fileSel.dataset.exDate)||new Date().toISOString().slice(0,10);
-      const cls=curCls==='all'?defaultClsId():curCls;
-      const stu=DB.students.filter(s=>!s.archived && stuCls(s)===cls);
-      ex={id:uid(),paper:false,name,date:dStr,cls,subjects:[],students:stu.map(s=>({id:s.id,name:s.name,subjects:{},total:0}))};
-      DB.exams.push(ex);save();renderExList();
+      /* 目标班级：优先使用「Excel 一键导入」时记录的下拉值；否则用当前班级 */
+      const targetCls=(fileSel&&fileSel.dataset.imptCls) ? fileSel.dataset.imptCls : (curCls==='all'?defaultClsId():curCls);
+      if(!targetCls){toast('请先选择目标班级');return;}
+      const stu=DB.students.filter(s=>!s.archived && stuCls(s)===targetCls);
+      ex={id:uid(),paper:false,name,date:dStr,cls:targetCls,subjects:[],students:stu.map(s=>({id:s.id,name:s.name,subjects:{},total:0}))};
+      DB.exams.push(ex);
+      /* 自动切到目标班级，让用户能看到这次刚导入的考试 */
+      curCls=targetCls;
+      save();renderExList();bindClsTabs('exClsTabs');
     }
 
     /* 把识别到的所有科目都纳入本次考试（含原来已选的） */
@@ -4214,6 +4225,11 @@ async function importExamFromExcel(ex,file){
     let tip=`已自动识别 ${autoDetect.length} 个科目，导入 ${matched} 条数据`;
     if(extraNames.length)tip+=`（含自动命名：${extraNames.join('、')}）`;
     if(missing.length)tip+=`；${missing.length} 人 Excel 中未找到`;
+    /* 0 条匹配时给出明确指引（典型场景：Excel 来自另一个班级） */
+    if(matched===0 && (!ex || ex.cls===(fileSel&&fileSel.dataset.imptCls))){
+      const tg=(fileSel&&fileSel.dataset.imptCls)||ex.cls||defaultClsId();
+      tip+=`。未匹配到任何学生——请确认 Excel 归属班级（当前目标班级：${clsLabel(tg)}），可切换「目标班级」下拉后重新导入`;
+    }
     toast(tip);
   }catch(err){toast('Excel 解析失败：'+(err.message||err));}
 }
