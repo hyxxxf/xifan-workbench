@@ -828,8 +828,15 @@ function loadScript(src){
   return new Promise((res,rej)=>{
     if(_LIB[src])return res();
     const s=document.createElement('script');s.src=src;s.onload=()=>{_LIB[src]=1;res();};
-    s.onerror=()=>rej(new Error('库加载失败'));document.head.appendChild(s);
+    s.onerror=()=>rej(new Error('库加载失败：'+src));document.head.appendChild(s);
   });
+}
+/* xlsx 优先用本地（部署到 GitHub Pages 时与 index.html 同目录），CDN 兜底；两者都失败才报错 */
+async function loadXLSX(){
+  if(typeof XLSX!=='undefined')return;
+  const local='./xlsx.full.min.js';
+  try{await loadScript(local);return;}catch(e){/* 本地缺失时静默回退到 CDN */}
+  await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
 }
 function fallbackCopy(t){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('已复制');}catch(e){toast('复制失败');}document.body.removeChild(ta);}
 
@@ -1701,7 +1708,7 @@ async function onExcel(file){
   if(!file){return;}
   const wrap=$('#impPreviewWrap');wrap.innerHTML='<div class="imp-loading">正在解析表格…</div>';
   try{
-    await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    await loadXLSX();
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array'});
     const ws=wb.Sheets[wb.SheetNames[0]];
@@ -1714,7 +1721,7 @@ async function onExcel(file){
 /* 下载学生导入模板（表头 + 一行示例 + 多个空行） */
 async function downloadStudentTemplate(){
   try{
-    if(typeof XLSX==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    await loadXLSX();
     const header=['姓名*','学号','性别','电话','家长'];
     const sample=['张三','2024001','男','13800000000','张爸爸'];
     /* 30 行空白占位，方便老师直接填 */
@@ -4122,8 +4129,15 @@ function downloadExamTemplate(){
 /* 从 Excel 解析后灌入已创建的考试 ex.students[i].subjects */
 async function importExamFromExcel(ex,file){
   if(!file){return;}
+  const fName=file.name||'未命名';
+  const fSize=file.size||0;
+  /* 前置校验：大小 / 扩展名，避免无意义的库加载 */
+  if(fSize>10*1024*1024){toast(`文件过大（${(fSize/1024/1024).toFixed(1)}MB > 10MB）：${fName}`);return;}
+  const okExt=/\.(xlsx|xls|csv|ods)$/i;
+  if(file.name && !okExt.test(file.name)){toast(`不支持的文件类型：${fName}（仅支持 .xlsx / .xls / .csv）`);return;}
   try{
-    if(typeof XLSX==='undefined')await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    await loadXLSX();
+    if(typeof XLSX==='undefined'){toast('Excel 解析库未加载，请检查网络后重试');return;}
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array'});
     const ws=wb.Sheets[wb.SheetNames[0]];
@@ -4197,9 +4211,8 @@ async function importExamFromExcel(ex,file){
       const stu=DB.students.filter(s=>!s.archived && stuCls(s)===targetCls);
       ex={id:uid(),paper:false,name,date:dStr,cls:targetCls,subjects:[],students:stu.map(s=>({id:s.id,name:s.name,subjects:{},total:0}))};
       DB.exams.push(ex);
-      /* 自动切到目标班级，让用户能看到这次刚导入的考试 */
-      curCls=targetCls;
-      save();renderExList();bindClsTabs('exClsTabs');
+      /* 不强制切换当前班级：避免下拉默认值被"锁"在刚导入的班级，导致下一次导入串班（如 5 班导入后 6 班再导入时下拉仍停在 5 班） */
+      save();renderExList();
     }
 
     /* 把识别到的所有科目都纳入本次考试（含原来已选的） */
@@ -4225,13 +4238,61 @@ async function importExamFromExcel(ex,file){
     let tip=`已自动识别 ${autoDetect.length} 个科目，导入 ${matched} 条数据`;
     if(extraNames.length)tip+=`（含自动命名：${extraNames.join('、')}）`;
     if(missing.length)tip+=`；${missing.length} 人 Excel 中未找到`;
+    /* 读取 fileSel（dataset 可能在 if(!ex){} 块内，外部需重新拿） */
+    const _fileSelForTip=$('#exExcelFile');
+    const imptCls=_fileSelForTip&&_fileSelForTip.dataset.imptCls;
     /* 0 条匹配时给出明确指引（典型场景：Excel 来自另一个班级） */
-    if(matched===0 && (!ex || ex.cls===(fileSel&&fileSel.dataset.imptCls))){
-      const tg=(fileSel&&fileSel.dataset.imptCls)||ex.cls||defaultClsId();
+    if(matched===0 && (!ex || ex.cls===imptCls)){
+      const tg=imptCls||ex.cls||defaultClsId();
       tip+=`。未匹配到任何学生——请确认 Excel 归属班级（当前目标班级：${clsLabel(tg)}），可切换「目标班级」下拉后重新导入`;
     }
+    /* 自动把 Excel 中新出现的姓名加入目标班级（解决"另一个班成绩不能识别"——无论 0 匹配还是部分匹配都生效） */
+    if(dataRows.length>0){
+      const targetCls2=imptCls || (ex&&ex.cls) || defaultClsId();
+      if(targetCls2 && (DB.classes||[]).some(c=>c.id===targetCls2)){
+        const knownNames=new Set(ex.students.map(s=>s.name));
+        const fresh=dataRows.map(r=>String(r[iName]||'').trim()).filter(n=>n && !knownNames.has(n));
+        if(fresh.length){
+          /* 去重 */
+          const uniq=[...new Set(fresh)];
+          uniq.forEach(nm=>{
+            const id='stu_'+nm+'_'+targetCls2+'_'+Math.random().toString(36).slice(2,6);
+            DB.students.push({id,name:nm,cls:targetCls2});
+            /* 也同步到当前考试的 ex.students，让"保存并计算"按钮可见 */
+            ex.students.push({id,name:nm,subjects:{},total:0});
+          });
+          /* 立即重新匹配，把新增的学生分数也填进去 */
+          let added=0;
+          uniq.forEach(nm=>{
+            const row=dataRows.find(r=>String(r[iName]||'').trim()===nm);
+            if(!row)return;
+            const st=ex.students.find(x=>x.name===nm);
+            if(!st)return;
+            let total=0;
+            autoDetect.forEach(col=>{
+              const v=parseFloat(row[col.idx]);
+              if(!isNaN(v)&&v>=0&&v<=150){st.subjects[col.name]=v;total+=v;}
+            });
+            st.total=total;
+            if(total>0)added++;
+          });
+          save();
+          renderExList();renderExEditor(ex);
+          toast(`未在目标班级找到学生，已自动添加 ${uniq.length} 人并导入 ${added} 条数据`);
+          return;
+        }
+      }
+    }
     toast(tip);
-  }catch(err){toast('Excel 解析失败：'+(err.message||err));}
+  }catch(err){
+    const msg=(err&&err.message)||(typeof err==='string'?err:'')||'未知错误';
+    let detail=`Excel 解析失败：${msg}\n文件：${fName}（${(fSize/1024).toFixed(1)}KB）`;
+    if(/库加载失败|SheetJS|xlsx/i.test(msg))detail+='\n→ xlsx 库加载失败，本地+CDN 都不可用，请检查网络';
+    else if(/Unsupported|Invalid|zip|Corrupt|not a valid/i.test(msg))detail+='\n→ 文件格式无效或已损坏，请用「WPS/Excel 另存为 .xlsx」后再试';
+    else detail+='\n→ 可尝试：① 用 Excel 打开再另存为 .xlsx ② 关闭文件后重新选择 ③ 刷新页面重试';
+    alert(detail);
+    toast('Excel 解析失败：'+msg);
+  }
 }
 function renderExEditor(ex){
   const box=$('#exEditor');if(!box)return;
