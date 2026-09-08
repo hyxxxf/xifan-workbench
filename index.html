@@ -946,22 +946,20 @@ function handleAction(a,el,e){
     case 'open-ai':openAiModal();break;
     case 'cls-manage':openClassManager();break;
     case 'open-doubao':{
-      /* 优先尝试 doubao:// 协议唤起豆包桌面客户端；唤起成功（页面切走 hidden=true）则不再回退；
-         唤起失败/未安装桌面端则打开网页版 https://www.doubao.com/chat/ */
-      const ua=navigator.userAgent;
-      const isMac=/Mac/i.test(ua),isWin=/Windows/i.test(ua);
-      const proto=isMac?'doubao://chat':'doubao://chat';
-      const start=Date.now();
-      try{window.location.href=proto;}catch(_){}
-      /* 桌面端唤起需时通常 <1.5s；1.5s 后还在前台 → 协议失败 → 兜底网页版 */
-      setTimeout(()=>{
-        if(Date.now()-start<1600 && document.visibilityState!=='hidden'){
-          window.open('https://www.doubao.com/chat/','_blank');
-          toast('未检测到豆包桌面端，已打开网页版');
-        }else{
-          toast('已唤起豆包');
-        }
-      },700);
+      /* ① 直接打开豆包网页版（在点击手势内同步执行，绕过浏览器弹窗拦截） */
+      const url='https://www.doubao.com/chat/';
+      const w=window.open(url,'_blank','noopener');
+      if(!w){
+        toast('浏览器拦截了新窗口，已改为当前页跳转；如不想离开本页请允许弹窗');
+        window.location.href=url;
+      }
+      /* ② 后台尝试唤起豆包桌面端（隐藏 iframe，不导航当前页、不阻塞） */
+      try{
+        const f=document.createElement('iframe');
+        f.style.display='none';f.src='doubao://chat';
+        document.body.appendChild(f);
+        setTimeout(()=>{try{document.body.removeChild(f);}catch(_){}},2000);
+      }catch(_){}
       break;
     }
     case 'open-todo':openTodoModal();break;
