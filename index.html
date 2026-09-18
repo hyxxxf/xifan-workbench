@@ -1472,6 +1472,12 @@ function clsLabel(c){
   const f=(DB.classes||[]).find(x=>x.id===c);
   return f?f.name:(c+'班');
 }
+/* 生成班级下拉 <option> 列表（与实际班级一致，避免 5班/6班 学生被错归到硬编码的 1班/2班） */
+function clsOptionsHtml(selected){
+  const list=(DB.classes||[]);
+  if(!list.length)return `<option value="1" ${selected==='1'?'selected':''}>1班</option><option value="2" ${selected==='2'?'selected':''}>2班</option>`;
+  return list.map(c=>`<option value="${c.id}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('');
+}
 function clsTabsHtml(id,includeAll){
   id=id||'stClsTabs';
   const arr=[...(includeAll?['all']:[]),...(DB.classes||[]).map(c=>c.id)];
@@ -1609,10 +1615,10 @@ function updateStBatchBar(){
   bar.classList.toggle('hidden', stSel.size===0);
 }
 function openStImport(){
-  const defCls=(curCls!=='all'?curCls:'1');
+  const defCls=(curCls!=='all'?curCls:defaultClsId());
   openModal(`<h3>批量导入学生</h3>
     <div class="row" style="margin-bottom:10px;align-items:flex-end">
-      <div class="field" style="flex:0 0 auto"><label>导入到</label><select id="impCls"><option value="1" ${defCls==='1'?'selected':''}>1班</option><option value="2" ${defCls==='2'?'selected':''}>2班</option></select></div>
+      <div class="field" style="flex:0 0 auto"><label>导入到</label><select id="impCls">${clsOptionsHtml(defCls)}</select></div>
       <span class="muted" style="font-size:12px;padding-bottom:8px">本次导入的学生将归入所选班级</span>
     </div>
     <div class="tabs">
@@ -3956,7 +3962,7 @@ function openStModal(id){
     <div class="row">
       <div class="field" style="flex:1"><label>学号</label><input id="stMNo" value="${s?esc(s.no||''):''}"></div>
       <div class="field" style="flex:1"><label>性别</label><select id="stMSex"><option ${s&&s.gender==='男'?'selected':''}>男</option><option ${s&&s.gender==='女'?'selected':''}>女</option></select></div>
-      <div class="field" style="flex:1"><label>班级</label><select id="stMCls"><option value="1" ${defCls==='1'?'selected':''}>1班</option><option value="2" ${defCls==='2'?'selected':''}>2班</option></select></div>
+      <div class="field" style="flex:1"><label>班级</label><select id="stMCls">${clsOptionsHtml(defCls)}</select></div>
     </div>
     <div class="row">
       <div class="field" style="flex:1"><label>联系电话</label><input id="stMPhone" value="${s?esc(s.phone||''):''}"></div>
@@ -3971,8 +3977,9 @@ function openStModal(id){
 }
 function importSampleStudents(){
   const names=['张伟','王芳','李娜','刘洋','陈静','杨帆','赵磊','黄敏','周杰','吴婷','徐强','孙丽','马超','朱琳','胡军','郭涛'];
-  names.forEach((n,i)=>{if(!DB.students.find(s=>s.name===n))DB.students.push({id:uid(),name:n,no:'2026'+String(i+1).padStart(2,'0'),cls:'1',gender:i%2?'女':'男',phone:'',parent:'',notes:'',archived:false});});
-  save();renderStList();toast('已填充 '+names.length+' 名示例学生（1班）');
+  const dCls=defaultClsId();
+  names.forEach((n,i)=>{if(!DB.students.find(s=>s.name===n))DB.students.push({id:uid(),name:n,no:'2026'+String(i+1).padStart(2,'0'),cls:dCls,gender:i%2?'女':'男',phone:'',parent:'',notes:'',archived:false});});
+  save();renderStList();toast('已填充 '+names.length+' 名示例学生（'+clsLabel(dCls)+'）');
 }
 function openKModal(){
   openModal(`<h3>新增知识点</h3>
