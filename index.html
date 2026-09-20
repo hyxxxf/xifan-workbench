@@ -269,6 +269,8 @@ textarea{resize:vertical}
 .stu-cell:hover{border-color:var(--primary);filter:brightness(.97)}
 .stu-cell .nm{font-size:16px;font-weight:700;color:var(--text);line-height:1.25;word-break:break-all}
 .stu-cell .sub{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 学生卡片左上角序号（按显示顺序 1、2、3…，从左到右） */
+.stu-cell .seq{position:absolute;top:4px;left:5px;font-size:10px;font-weight:700;color:var(--muted);background:rgba(255,255,255,.75);border:1px solid var(--input-b);border-radius:6px;padding:0 5px;line-height:1.5;pointer-events:none}
 .stu-cell.empty{border-style:dashed;color:var(--muted);font-size:14px}
 /* 学生档案按性别区分背景 */
 .stu-cell.st-male{background:#e8f3ff;border-color:#b9d4f0}
@@ -1798,6 +1800,7 @@ function renderStList(){
       const subLine = meta ? `<div class="sub">${esc(meta)}</div>` : '';
       const genderCls = s.gender==='男'?'st-male':s.gender==='女'?'st-female':'';
       cells.push(`<div class="stu-cell ${genderCls}" data-action="st-actmenu" data-id="${s.id}" title="${esc(s.name)}${meta?' · '+esc(meta):''}">
+        <span class="seq">${i+1}</span>
         <div class="nm">${esc(s.name||'')}</div>
         ${subLine}
       </div>`);
