@@ -2950,6 +2950,18 @@ function renderTrend(){
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-h">学生历次成绩对比表</div>
+    <div class="muted" style="margin-bottom:10px;font-size:12px">每位同学历次成绩横向对比 · 默认数学 · 新增考试自动加入：</div>
+    <div class="row" id="stuCmpSubjChips" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">
+      ${subjects.map(s=>`<button class="chip ${s==='数学'?'active':''}" data-action="stu-cmp-subj" data-sub="${esc(s)}">${esc(s)}</button>`).join('')}
+    </div>
+    <div id="stuCmpTable"></div>
+    <div class="trend-export-row">
+      <button class="btn" data-action="export-stu-cmp">↓ 导出历次对比表（CSV）</button>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-h">学生个人成长曲线</div>
     <div class="row" style="margin-bottom:14px;gap:10px;flex-wrap:wrap;align-items:center">
@@ -2973,6 +2985,7 @@ function renderTrend(){
   // 初始渲染
   renderClassCurve(defaultSubj);
   renderClassTable(latest);
+  renderStuCmpTable(subjects.includes('数学')?'数学':subjects[0]);
 
   // 绑定事件
   box.querySelectorAll('[data-action=trend-subj]').forEach(b=>b.onclick=()=>{
@@ -2995,13 +3008,25 @@ function renderTrend(){
     renderClassTable(ex);
   };
 
+  // 学生历次成绩对比表：科目切换
+  box.querySelectorAll('[data-action=stu-cmp-subj]').forEach(b=>b.onclick=()=>{
+    box.querySelectorAll('[data-action=stu-cmp-subj]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    renderStuCmpTable(b.dataset.sub);
+  });
+
   // 导出按钮
   box.querySelector('[data-action=export-class-curve]').onclick=exportClassCurvePNG;
   box.querySelector('[data-action=export-class-table]').onclick=exportClassTableCSV;
   box.querySelector('[data-action=export-stu-curve]').onclick=exportStuCurvePNG;
+  box.querySelector('[data-action=export-stu-cmp]').onclick=()=>{
+    const subj=document.querySelector('#stuCmpSubjChips .chip.active')?.dataset.sub||(subjects.includes('数学')?'数学':subjects[0]);
+    exportStuCmpCSV(subj);
+  };
 
   // 表格姓名点击 → 直接跳到该学生个人成长曲线（事件委托，表格重渲染也生效）
   attachStuGoto($('#classTable'));
+  attachStuGoto($('#stuCmpTable'));
 }
 
 /* 表格里 [data-action=stu-goto] 委托：点击姓名 → 跳到个人成长曲线
@@ -3145,6 +3170,56 @@ function renderClassTable(ex){
 
   box.innerHTML=html;
   const metaBox=$('#trendExamMeta');if(metaBox)metaBox.textContent=`${ex.subjects.length} 科 · ${total} 人`;
+}
+
+/* 学生历次成绩对比表：每行一个学生，每列一场考试，默认数学 */
+function renderStuCmpTable(subj){
+  const box=$('#stuCmpTable');if(!box)return;
+  const exams=getTrendExams();
+  if(!exams.length){box.innerHTML='<div class="empty"><div class="big">📊</div>暂无考试数据</div>';return;}
+  const hasSubj=exams.some(e=>e.subjects.includes(subj));
+  if(!hasSubj){box.innerHTML=`<div class="empty"><div class="big">📊</div>暂无 <b>${esc(subj)}</b> 成绩记录</div>`;return;}
+
+  const students=DB.students.filter(s=>!s.archived);
+  const excL=RULES.default.strong, passL=RULES.default.weak;
+  const cellCls=v=>v>=excL?'cell-good':v>=passL?'cell-mid':'cell-bad';
+
+  // 表头：排名 + 姓名 + 各考试 + 均分 + 变化
+  let html=`<div class="scroll-x tb-sticky"><table class="tb"><thead><tr><th>排名</th><th>姓名</th>`;
+  exams.forEach(ex=>{if(ex.subjects.includes(subj))html+=`<th>${esc(ex.name)}<br><span class="muted" style="font-size:11px">${ex.date}</span></th>`;});
+  html+=`<th>均分</th><th>变化</th></tr></thead><tbody>`;
+
+  const rows=students.map(stu=>{
+    const scores=[];let sum=0,count=0;
+    exams.forEach(ex=>{
+      if(!ex.subjects.includes(subj)){scores.push(null);return;}
+      const stEx=ex.students.find(x=>x.id===stu.id);
+      const v=stEx?(+(stEx.subjects[subj]||0)||null):null;
+      scores.push(v);
+      if(v!=null){sum+=v;count++;}
+    });
+    const avg=count?sum/count:0;
+    const valid=scores.filter(v=>v!=null);
+    return {stu,scores,avg,latest:valid[valid.length-1],prev:valid[valid.length-2]};
+  });
+
+  // 按最近一场有效成绩排序；无最近成绩按均分
+  rows.sort((a,b)=>{
+    const al=a.latest!=null?a.latest:(a.avg||0);
+    const bl=b.latest!=null?b.latest:(b.avg||0);
+    return bl-al;
+  });
+
+  rows.forEach((r,idx)=>{
+    html+=`<tr><td>${idx+1}</td><td><a href="#" class="stu-link" data-action="stu-goto" data-sid="${esc(r.stu.id)}" data-sub="${esc(subj)}" title="查看 ${esc(r.stu.name)} 的 ${esc(subj)} 成长曲线"><b>${esc(r.stu.name)}</b></a></td>`;
+    r.scores.forEach(v=>{
+      if(v==null)html+=`<td><span class="muted">-</span></td>`;
+      else html+=`<td class="${cellCls(v)}">${v}</td>`;
+    });
+    html+=`<td><b>${r.avg?r.avg.toFixed(1):'-'}</b></td><td>${trendBadge(r.latest,r.prev)}</td></tr>`;
+  });
+  html+=`</tbody></table></div>`;
+  box.innerHTML=html;
 }
 
 function renderStuArea(sid,focusSubj){
@@ -3332,6 +3407,40 @@ function exportClassTableCSV(){
   a.href=url;a.download=`${ex.name} 全班成绩.csv`;
   a.click();URL.revokeObjectURL(url);
   toast('已导出 CSV');
+}
+function exportStuCmpCSV(subj){
+  const exams=getTrendExams().filter(e=>e.subjects.includes(subj));
+  if(!exams.length){toast(`暂无 ${subj} 的考试记录`);return;}
+  const students=DB.students.filter(s=>!s.archived);
+  let csv='\uFEFF排名,姓名,'+exams.map(e=>`${e.name}(${e.date})`).join(',')+',均分,变化\n';
+  const rows=students.map(stu=>{
+    const scores=[];let sum=0,count=0;
+    exams.forEach(ex=>{
+      const stEx=ex.students.find(x=>x.id===stu.id);
+      const v=stEx?(+(stEx.subjects[subj]||0)||null):null;
+      scores.push(v);
+      if(v!=null){sum+=v;count++;}
+    });
+    const avg=count?sum/count:0;
+    const valid=scores.filter(v=>v!=null);
+    const latest=valid[valid.length-1];
+    const prev=valid[valid.length-2];
+    const diff=(latest!=null&&prev!=null)?(latest-prev):'';
+    return {stu,scores,avg,diff};
+  }).sort((a,b)=>{
+    const al=a.scores.filter(v=>v!=null).slice(-1)[0]||(a.avg||0);
+    const bl=b.scores.filter(v=>v!=null).slice(-1)[0]||(b.avg||0);
+    return bl-al;
+  });
+  rows.forEach((r,i)=>{
+    csv+=[i+1,JSON.stringify(r.stu.name),...r.scores.map(v=>v==null?'':v),r.avg?r.avg.toFixed(1):'',r.diff!==''?r.diff:''].join(',')+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`学生${subj}历次成绩对比_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();URL.revokeObjectURL(url);
+  toast('已导出历次对比表');
 }
 
 /* ============================================================
