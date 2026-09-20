@@ -2875,8 +2875,30 @@ function drawLineChart(cv,series,opts){
   ctx.strokeStyle=muted;ctx.beginPath();ctx.moveTo(pad.l,H-pad.b);ctx.lineTo(W-pad.r,H-pad.b);ctx.stroke();
 }
 
+/* 成长曲线页单独记录「统计哪个班」：
+   以前这里不按班级过滤，导致别班的同名同期考试也被算进来，
+   出现「一场考试渲染成 N 列」的重复列问题。 */
+let trendCls=null;
+function trendClsId(){
+  if(trendCls && clsExists(trendCls))return trendCls;
+  if(curCls!=='all' && clsExists(curCls)){
+    const n=DB.exams.filter(e=>!e.paper && (e.cls||defaultClsId())===curCls).length;
+    if(n>0)return curCls;
+  }
+  /* 当前班没考试时，自动落到考试场次最多的班，避免页面一片空白 */
+  const cnt={};
+  DB.exams.filter(e=>!e.paper).forEach(e=>{const c=(e.cls||defaultClsId());cnt[c]=(cnt[c]||0)+1;});
+  const best=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  if(best && clsExists(best))return best;
+  return (curCls!=='all'&&clsExists(curCls))?curCls:defaultClsId();
+}
 function getTrendExams(){
-  return DB.exams.filter(e=>!e.paper).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const c=trendClsId();
+  return DB.exams.filter(e=>!e.paper && (e.cls||defaultClsId())===c).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+}
+function trendStudents(){
+  const c=trendClsId();
+  return DB.students.filter(s=>!s.archived && stuCls(s)===c);
 }
 function getTrendSubjects(exams){
   const s=new Set();
@@ -2899,27 +2921,50 @@ function rankBadge(curr,prev){
   return `<span class="tag ${cls}">${diff>0?'↑':'↓'} ${Math.abs(diff)} 名</span>`;
 }
 
+/* 成长曲线页「统计班级」下拉：切换后重算整页（考试列、学生名单都跟着变） */
+function bindTrendClsPick(){
+  const sel=$('#trendClsPick');if(!sel)return;
+  sel.onchange=()=>{trendCls=sel.value;renderTrend();};
+}
+
 function renderTrend(){
   const box=$('#gTrend');if(!box)return;
   const exams=getTrendExams();
 
   if(!exams.length){
-    box.innerHTML='<div class="empty"><div class="big">📉</div>暂无考试数据，请先在「成绩看板」创建考试并录入成绩</div>';
+    box.innerHTML=`
+    <div class="row" style="margin-bottom:12px;gap:10px;flex-wrap:wrap;align-items:center">
+      <span class="muted">统计班级：</span>
+      <select id="trendClsPick" style="min-width:150px">
+        ${(DB.classes||[]).map(c=>`<option value="${esc(c.id)}" ${c.id===trendClsId()?'selected':''}>${esc(c.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="empty"><div class="big">📉</div>「${clsLabel(trendClsId())}」暂无考试数据，请先在「成绩看板」创建考试并录入成绩，或切换上方班级</div>`;
+    bindTrendClsPick();
     return;
   }
 
   const subjects=getTrendSubjects(exams);
   const latest=exams[exams.length-1];
-  const stuOpts=DB.students.filter(s=>!s.archived).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const clsId=trendClsId();
+  const stuOpts=trendStudents().map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
 
   // 默认聚焦科目：优先「数学」，否则第一个科目
   const defaultSubj=subjects.includes('数学')?'数学':subjects[0];
 
   box.innerHTML=`
+  <div class="row" style="margin-bottom:12px;gap:10px;flex-wrap:wrap;align-items:center">
+    <span class="muted">统计班级：</span>
+    <select id="trendClsPick" style="min-width:150px">
+      ${(DB.classes||[]).map(c=>`<option value="${esc(c.id)}" ${c.id===clsId?'selected':''}>${esc(c.name)}</option>`).join('')}
+    </select>
+    <span class="muted" style="font-size:12px">（只统计该班级的考试与学生，切换班级看别的班）</span>
+  </div>
+
   <div class="grid-cards" style="margin-bottom:14px">
     <div class="stat"><div class="num">${exams.length}</div><div class="lbl">考试场次</div></div>
     <div class="stat"><div class="num">${subjects.length}</div><div class="lbl">科目数</div></div>
-    <div class="stat"><div class="num">${DB.students.filter(s=>!s.archived).length}</div><div class="lbl">在册学生</div></div>
+    <div class="stat"><div class="num">${trendStudents().length}</div><div class="lbl">在册学生</div></div>
   </div>
 
   <div class="card" style="margin-bottom:18px">
@@ -3007,6 +3052,7 @@ function renderTrend(){
     const ex=exams.find(x=>x.id===e.target.value);
     renderClassTable(ex);
   };
+  bindTrendClsPick();
 
   // 学生历次成绩对比表：科目切换
   box.querySelectorAll('[data-action=stu-cmp-subj]').forEach(b=>b.onclick=()=>{
@@ -3180,7 +3226,7 @@ function renderStuCmpTable(subj){
   const hasSubj=exams.some(e=>e.subjects.includes(subj));
   if(!hasSubj){box.innerHTML=`<div class="empty"><div class="big">📊</div>暂无 <b>${esc(subj)}</b> 成绩记录</div>`;return;}
 
-  const students=DB.students.filter(s=>!s.archived);
+  const students=trendStudents();
   const excL=RULES.default.strong, passL=RULES.default.weak;
   const cellCls=v=>v>=excL?'cell-good':v>=passL?'cell-mid':'cell-bad';
 
@@ -3411,7 +3457,7 @@ function exportClassTableCSV(){
 function exportStuCmpCSV(subj){
   const exams=getTrendExams().filter(e=>e.subjects.includes(subj));
   if(!exams.length){toast(`暂无 ${subj} 的考试记录`);return;}
-  const students=DB.students.filter(s=>!s.archived);
+  const students=trendStudents();
   let csv='\uFEFF排名,姓名,'+exams.map(e=>`${e.name}(${e.date})`).join(',')+',均分,变化\n';
   const rows=students.map(stu=>{
     const scores=[];let sum=0,count=0;
