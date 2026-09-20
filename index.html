@@ -2912,6 +2912,9 @@ function renderTrend(){
   const latest=exams[exams.length-1];
   const stuOpts=DB.students.filter(s=>!s.archived).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
 
+  // 默认聚焦科目：优先「数学」，否则第一个科目
+  const defaultSubj=subjects.includes('数学')?'数学':subjects[0];
+
   box.innerHTML=`
   <div class="grid-cards" style="margin-bottom:14px">
     <div class="stat"><div class="num">${exams.length}</div><div class="lbl">考试场次</div></div>
@@ -2923,7 +2926,7 @@ function renderTrend(){
     <div class="card-h">班级各科成绩趋势</div>
     <div class="muted" style="margin-bottom:10px;font-size:12px">连「比上次进步还是退步」都标好了 · 选科目切换：</div>
     <div class="row" id="trendSubjChips" style="flex-wrap:wrap;gap:8px;margin-bottom:12px">
-      ${subjects.map((s,i)=>`<button class="chip ${i===0?'active':''}" data-action="trend-subj" data-sub="${esc(s)}">${esc(s)}</button>`).join('')}
+      ${subjects.map((s,i)=>`<button class="chip ${s===defaultSubj?'active':''}" data-action="trend-subj" data-sub="${esc(s)}">${esc(s)}</button>`).join('')}
     </div>
     <div id="classCurve"></div>
     <div class="trend-export-row">
@@ -2955,16 +2958,20 @@ function renderTrend(){
         <option value="">-- 请选择学生 --</option>
         ${stuOpts}
       </select>
+      <span class="muted" style="margin-left:6px">筛选科目：</span>
+      <div class="row" id="stuSubjChips" style="flex-wrap:wrap;gap:8px">
+        ${subjects.map(s=>`<button class="chip ${s===defaultSubj?'active':''}" data-action="stu-subj-filter" data-sub="${esc(s)}">${esc(s)}</button>`).join('')}
+      </div>
       <button class="btn" data-action="export-stu-curve" id="exportStuCurveBtn" disabled>↓ 导出个人曲线（PNG）</button>
     </div>
-    <div class="muted" style="margin-bottom:10px;font-size:12px">把零散分数变成能看的图表</div>
+    <div class="muted" style="margin-bottom:10px;font-size:12px">把零散分数变成能看的图表 · 点科目只显示该科历次成绩变化</div>
     <div id="stuArea">
       <div class="empty"><div class="big">👤</div>选个学生查看他的各科成长曲线</div>
     </div>
   </div>`;
 
   // 初始渲染
-  renderClassCurve(subjects[0]);
+  renderClassCurve(defaultSubj);
   renderClassTable(latest);
 
   // 绑定事件
@@ -2973,7 +2980,16 @@ function renderTrend(){
     b.classList.add('active');
     renderClassCurve(b.dataset.sub);
   });
-  $('#stuPick').onchange=e=>renderStuArea(e.target.value);
+  box.querySelectorAll('[data-action=stu-subj-filter]').forEach(b=>b.onclick=()=>{
+    box.querySelectorAll('[data-action=stu-subj-filter]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    const sid=$('#stuPick')?.value;
+    if(sid)renderStuArea(sid,b.dataset.sub);
+  });
+  $('#stuPick').onchange=e=>{
+    const active=document.querySelector('#stuSubjChips .chip.active');
+    renderStuArea(e.target.value, active?.dataset.sub);
+  };
   $('#trendExamPick').onchange=e=>{
     const ex=exams.find(x=>x.id===e.target.value);
     renderClassTable(ex);
@@ -2998,6 +3014,7 @@ function attachStuGoto(root){
     const a=e.target.closest('[data-action=stu-goto]');if(!a)return;
     e.preventDefault();
     const sid=a.dataset.sid;
+    const focusSubj=a.dataset.sub;
     const nameText=a.textContent.trim();
     const doPick=()=>{
       const pick=$('#stuPick');
@@ -3006,7 +3023,11 @@ function attachStuGoto(root){
         const opt=document.createElement('option');opt.value=sid;opt.textContent=nameText;pick.appendChild(opt);
       }
       pick.value=sid;
-      renderStuArea(sid);
+      /* 同步个人曲线科目筛选 */
+      if(focusSubj){
+        document.querySelectorAll('[data-action=stu-subj-filter]').forEach(c=>c.classList.toggle('active',c.dataset.sub===focusSubj));
+      }
+      renderStuArea(sid,focusSubj);
       const area=$('#stuArea');if(area)area.scrollIntoView({behavior:'smooth',block:'start'});
     };
     const pick=$('#stuPick');
@@ -3107,10 +3128,11 @@ function renderClassTable(ex){
     return {...s,_total:total,_avg:total/ex.subjects.length};
   }).sort((a,b)=>b._total-a._total);
 
+  const activeSubj=document.querySelector('#trendSubjChips .chip.active')?.dataset.sub||ex.subjects[0];
   ranked.forEach((s,idx)=>{
     html+=`<tr>
       <td>${idx+1}</td>
-      <td><a href="#" class="stu-link" data-action="stu-goto" data-sid="${esc(s.id)}" title="点击查看该学生的个人成长曲线"><b>${esc(s.name)}</b></a></td>
+      <td><a href="#" class="stu-link" data-action="stu-goto" data-sid="${esc(s.id)}" data-sub="${esc(activeSubj)}" title="点击查看该学生的 ${esc(activeSubj)} 成长曲线"><b>${esc(s.name)}</b></a></td>
       ${ex.subjects.map(sub=>{
         const v=s.subjects[sub]||0;
         return `<td class="${cellCls(v)}">${v}</td>`;
@@ -3125,7 +3147,7 @@ function renderClassTable(ex){
   const metaBox=$('#trendExamMeta');if(metaBox)metaBox.textContent=`${ex.subjects.length} 科 · ${total} 人`;
 }
 
-function renderStuArea(sid){
+function renderStuArea(sid,focusSubj){
   const box=$('#stuArea');const btn=$('#exportStuCurveBtn');
   if(!sid){
     box.innerHTML='<div class="empty"><div class="big">👤</div>选个学生查看他的各科成长曲线</div>';
@@ -3180,17 +3202,32 @@ function renderStuArea(sid){
 
   const initial=(stu.name||'?')[0];
 
+  /* 若指定了 focusSubj，把它置顶并高亮；仍保留其他科目在下边 */
+  let visibleSeries=series;
+  let focusCard='';
+  if(focusSubj && subjects.includes(focusSubj)){
+    const idx=series.findIndex(s=>s.subj===focusSubj);
+    if(idx>=0){
+      const [focus]=series.splice(idx,1);
+      visibleSeries=[focus,...series];
+    }else{
+      focusCard=`<div class="card" style="margin-bottom:12px;padding:14px;background:#fff9e6;border:1px solid #f0e0a0;color:#8a6d0b;border-radius:10px">该学生暂无 <b>${esc(focusSubj)}</b> 的历次成绩记录</div>`;
+    }
+  }
+
   let html=`
   <div class="stu-header">
     <div class="avatar">${esc(initial)}</div>
     <div class="info">
       <div class="nm">${esc(stu.name)}</div>
-      <div class="sub">已参加 ${exams.length} 场考试 · ${subjects.length} 个科目${latestTotalRank?` · 最新总分名次 <b style="color:var(--primary)">第 ${latestTotalRank.rank} 名</b> ${rankBadge(latestTotalRank.rank, prevTotalRank?prevTotalRank.rank:null)}`:''}</div>
+      <div class="sub">已参加 ${exams.length} 场考试 · ${subjects.length} 个科目${latestTotalRank?` · 最新总分名次 <b style="color:var(--primary)">第 ${latestTotalRank.rank} 名</b> ${rankBadge(latestTotalRank.rank, prevTotalRank?prevTotalRank.rank:null)}`:''}${focusSubj?` · 当前聚焦 <b style="color:var(--primary)">${esc(focusSubj)}</b>`:''}</div>
     </div>
   </div>
+  ${focusCard}
   <div id="stuCurves">`;
 
-  series.forEach(({subj,points})=>{
+  visibleSeries.forEach(({subj,points})=>{
+    const isFocus=focusSubj===subj;
     const latest=points[points.length-1];
     const prev=points[points.length-2];
     const ranks=subjRankSeries[subj]||[];
@@ -3198,15 +3235,15 @@ function renderStuArea(sid){
     const rankPrev=ranks.slice(-2,-1)[0];
     const rankLine=rankLatest?`<div class="muted" style="font-size:13px">班内 <b style="color:var(--primary)">第 ${rankLatest.rank} 名</b> ${rankBadge(rankLatest.rank, rankPrev?rankPrev.rank:null)}</div>`:'';
     html+=`
-    <div class="subj-curve-card">
+    <div class="subj-curve-card" style="${isFocus?'border:2px solid var(--primary);background:rgba(46,158,91,.04);box-shadow:0 4px 14px rgba(46,158,91,.12)':''}">
       <div class="row between" style="margin-bottom:8px;align-items:center;gap:10px">
-        <div style="font-size:16px;font-weight:700">${esc(subj)}</div>
+        <div style="font-size:${isFocus?'20px':'16px'};font-weight:700">${esc(subj)} ${isFocus?'<span class="tag" style="margin-left:6px;background:var(--primary);color:#fff">当前科目</span>':''}</div>
         <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
           <div>最新 ${latest?latest.y:'--'} ${trendBadge(latest&&latest.y,prev&&prev.y)}</div>
           ${rankLine}
         </div>
       </div>
-      <canvas class="stu-cv" data-sub="${esc(subj)}" width="680" height="160"></canvas>
+      <canvas class="stu-cv" data-sub="${esc(subj)}" width="680" height="${isFocus?'220':'160'}"></canvas>
       <div class="muted" style="margin-top:6px;font-size:12px">${points.map(p=>`${p.date} ${p.y}`).join('  ·  ')}</div>
     </div>`;
   });
@@ -3214,7 +3251,7 @@ function renderStuArea(sid){
   html+=`</div>
   <div class="section-h" style="margin-top:14px">${esc(stu.name)} · 历次成绩明细</div>
   <div class="scroll-x"><table class="tb"><thead><tr><th>考试</th><th>日期</th>
-    ${subjects.map(s=>`<th>${esc(s)}</th>`).join('')}
+    ${subjects.map(s=>`<th ${focusSubj===s?'style="background:var(--primary);color:#fff;border-radius:6px 6px 0 0"':''}>${esc(s)}${focusSubj===s?' <span style="font-size:11px">(当前)</span>':''}</th>`).join('')}
     <th>总分</th><th>均分</th><th>班内名次</th>
   </tr></thead><tbody>`;
 
@@ -3231,9 +3268,9 @@ function renderStuArea(sid){
       <td>${ex.date}</td>
       ${subjects.map(sub=>{
         const v=stEx.subjects[sub];
-        if(v==null)return '<td><span class="muted">-</span></td>';
+        if(v==null)return `<td ${focusSubj===sub?'style="background:rgba(46,158,91,.06)"':''}><span class="muted">-</span></td>`;
         const cls=v>=RULES.default.strong?'cell-good':v>=RULES.default.weak?'cell-mid':'cell-bad';
-        return `<td class="${cls}">${v}</td>`;
+        return `<td class="${cls}" ${focusSubj===sub?'style="background:rgba(46,158,91,.08);font-weight:700"':''}>${v}</td>`;
       }).join('')}
       <td><b>${total}</b></td>
       <td class="${avg>=RULES.default.strong?'cell-good':avg>=RULES.default.weak?'cell-mid':'cell-bad'}">${avg.toFixed(1)}</td>
@@ -3248,7 +3285,7 @@ function renderStuArea(sid){
   // 绘制所有学生曲线
   $$('.stu-cv',box).forEach(cv=>{
     const subj=cv.dataset.sub;
-    const s=series.find(x=>x.subj===subj);
+    const s=visibleSeries.find(x=>x.subj===subj);
     if(s)drawLineChart(cv,[{label:subj,points:s.points}],{yMin:0,yMax:100,xLabels:s.points.map(p=>p.date)});
   });
 }
